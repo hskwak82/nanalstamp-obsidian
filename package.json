@@ -1,0 +1,21 @@
+{
+  "name": "nanalstamp-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "nanalStamp (MVP) — Obsidian plugin (M1 prototype)",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "node esbuild.config.mjs production",
+    "test": "esbuild dashcore.test.ts sealscope.test.ts archivemsg.test.ts storagecore.test.ts chunkcore.test.ts cryptocore.test.ts --bundle --platform=node --format=esm --out-extension:.js=.mjs --outdir=.testbuild && node --test .testbuild/dashcore.test.mjs .testbuild/sealscope.test.mjs .testbuild/archivemsg.test.mjs .testbuild/storagecore.test.mjs .testbuild/chunkcore.test.mjs .testbuild/cryptocore.test.mjs"
+  },
+  "dependencies": {
+    "isomorphic-git": "^1.38.6",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "esbuild": "^0.21.5",
+    "obsidian": "^1.5.7",
+    "typescript": "^5.4.5"
+  }
+}

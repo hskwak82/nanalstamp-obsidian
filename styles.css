@@ -1,0 +1,347 @@
+/* ── 설정 탭 2차(2026-07): 카드형 UI — 시작/계정/연동 카드 + 접힌 고급 ──────
+   테마 변수만 사용(라이트/다크 동시 대응). 카드 대비·배지·여백으로 시각 위계를
+   만든다(과한 원색 금지 — Obsidian 미학 유지).
+   주의: .nanalstamp-card 전역 규칙은 대시보드용 — 설정 카드는 .nanalstamp-settings
+   스코프로 덮어써 서로 간섭하지 않는다. */
+.nanalstamp-settings .nanalstamp-card {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+.nanalstamp-settings .nanalstamp-card-title {
+  font-size: 1.05em;
+  font-weight: 700;
+  color: var(--text-normal);
+  margin-bottom: 2px;
+}
+.nanalstamp-settings .nanalstamp-card-title-row { display: flex; align-items: center; gap: 10px; }
+.nanalstamp-settings .nanalstamp-card-desc { color: var(--text-muted); font-size: 0.88em; margin: 4px 0; }
+/* 카드 안 Setting 행 — 답답하지 않게: 구분선 제거, 여백만으로 분리 */
+.nanalstamp-settings .nanalstamp-card .setting-item { border: none; padding: 10px 0 4px; }
+
+/* 티어 배지 — pill(액센트 기반, Pro만 강조) */
+.nanalstamp-settings .nanalstamp-tier-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.7em;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 16%, transparent);
+  color: var(--text-muted);
+}
+.nanalstamp-settings .nanalstamp-tier-badge.is-pro {
+  background: color-mix(in srgb, var(--interactive-accent) 16%, transparent);
+  color: var(--interactive-accent);
+}
+
+/* 스토리지 사용량 바(계정 카드) */
+.nanalstamp-settings .nanalstamp-usage { margin: 8px 0 4px; }
+.nanalstamp-settings .nanalstamp-usage-label { display: flex; justify-content: space-between; gap: 12px; font-size: 0.85em; color: var(--text-muted); margin-bottom: 4px; }
+.nanalstamp-settings .nanalstamp-usage-label .v { color: var(--text-normal); font-variant-numeric: tabular-nums; }
+.nanalstamp-settings .nanalstamp-usage-bar { height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--text-muted) 15%, transparent); overflow: hidden; }
+.nanalstamp-settings .nanalstamp-usage-fill { height: 100%; border-radius: 3px; background: var(--interactive-accent); width: 0; }
+.nanalstamp-settings .nanalstamp-usage-fill.is-full { background: var(--text-error, var(--color-red)); }
+
+/* 카드 하단 버튼 행 — 라벨 영역 숨기고 버튼만 좌측 정렬 */
+.nanalstamp-settings .nanalstamp-card-btns { padding-top: 12px; }
+.nanalstamp-settings .nanalstamp-card-btns .setting-item-info { display: none; }
+.nanalstamp-settings .nanalstamp-card-btns .setting-item-control { justify-content: flex-start; flex-wrap: wrap; }
+
+/* 비밀번호 재설정 — 작은 텍스트 링크 */
+.nanalstamp-settings .nanalstamp-reset-link {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 0.85em;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-decoration: none;
+}
+.nanalstamp-settings .nanalstamp-reset-link:hover { color: var(--text-normal); text-decoration: underline; }
+
+/* 고급 설정 — 접힌 <details>: 클릭 유도(포인터·회색·회전 화살표), 열림 시 내부 여백 */
+.nanalstamp-settings details.nanalstamp-advanced { margin-top: 8px; }
+.nanalstamp-settings details.nanalstamp-advanced > summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 0.9em;
+  font-weight: 600;
+  padding: 10px 6px;
+  border-radius: 8px;
+  list-style: none;
+  user-select: none;
+}
+.nanalstamp-settings details.nanalstamp-advanced > summary::-webkit-details-marker { display: none; }
+.nanalstamp-settings details.nanalstamp-advanced > summary::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 8px;
+  transition: transform 120ms ease;
+}
+.nanalstamp-settings details.nanalstamp-advanced[open] > summary::before { transform: rotate(90deg); }
+.nanalstamp-settings details.nanalstamp-advanced > summary:hover { color: var(--text-normal); background: var(--background-modifier-hover); }
+.nanalstamp-settings .nanalstamp-advanced-body { padding: 4px 6px 16px; }
+
+/* 고급 내부 카테고리 헤딩 — 위 구분선·여백으로 섹션 분리(1차 개편 스타일 유지) */
+.nanalstamp-settings .setting-item.setting-item-heading {
+  border-top: 1px solid var(--background-modifier-border);
+  margin-top: 1.5em;
+  padding-top: 1em;
+}
+.nanalstamp-settings .setting-item.setting-item-heading .setting-item-name {
+  font-weight: 700;
+}
+
+/* nanalStamp — status bar seal icon */
+.nanalstamp-status-icon {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 4px;
+}
+
+.nanalstamp-status-icon.is-faded {
+  opacity: 0.4;
+}
+
+/* ── 증빙 상태 대시보드 (D안: 히어로 게이지+KPI + 카드 5장) ──────────────── */
+.nanalstamp-dash {
+  /* light 기본값(검증: CVD·대비 통과) */
+  --ns-seal: #c93c3c; --ns-warn: #9a6a00; --ns-info: #2a78d6; --ns-ok: #177e58;
+  /* 미봉인/트랙 중립색 — 보더 변수는 뷰 배경과 거의 같아 보이지 않으므로 잉크 혼합으로 생성 */
+  --ns-empty: color-mix(in srgb, var(--text-muted) 30%, transparent);
+  --ns-track: color-mix(in srgb, var(--text-muted) 15%, transparent);
+  /* 카드 면 — 테마 변수(secondary)는 일부 테마에서 배경과 동일하므로,
+     뷰 배경에 잉크를 섞어 어떤 테마에서든 배경과 확실히 분리된 면을 만든다 */
+  --ns-card: color-mix(in srgb, var(--background-primary) 95%, var(--text-normal));
+  padding: 12px 20px 40px;
+  overflow-y: auto;
+}
+.theme-dark .nanalstamp-dash {
+  --ns-seal: #e66767; --ns-warn: #c98500; --ns-info: #3987e5; --ns-ok: #199e70;
+  --ns-empty: color-mix(in srgb, var(--text-muted) 45%, transparent);
+  --ns-track: color-mix(in srgb, var(--text-muted) 20%, transparent);
+  --ns-card: color-mix(in srgb, var(--background-primary) 88%, var(--text-normal));
+}
+.nanalstamp-dash .num { font-variant-numeric: tabular-nums; }
+
+/* 헤더 */
+.nanalstamp-dash-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.nanalstamp-dash-title { font-size: 1.15em; font-weight: 750; margin: 0; color: var(--text-normal); }
+.nanalstamp-dash-sub { color: var(--text-muted); font-size: 0.85em; margin: 2px 0 0; }
+
+/* 공용 카드 */
+/* 카드는 뷰 배경(--background-primary)과 다른 면이어야 구분된다 — secondary가
+   다크에선 더 밝고 라이트에선 옅은 회색이라 양쪽 모두 '떠 있는 카드'로 읽힌다. */
+.nanalstamp-card { border: 1px solid color-mix(in srgb, var(--text-normal) 14%, transparent); border-radius: 10px; padding: 16px 18px; background: var(--ns-card); min-width: 0; }
+.nanalstamp-card h3 { margin: 0 0 12px; font-size: 0.85em; font-weight: 650; color: var(--text-muted); letter-spacing: 0.03em; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.nanalstamp-card h3 .n { color: var(--text-muted); font-weight: 500; }
+.nanalstamp-card.is-locked { opacity: 0.85; border-style: dashed; }
+.nanalstamp-dash-mut { color: var(--text-muted); font-size: 0.85em; }
+.nanalstamp-dash-warn { color: var(--ns-warn); font-size: 0.9em; }
+
+/* 히어로: 링 게이지 + KPI + 조성 바 */
+.nanalstamp-dash-hero { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+.nanalstamp-dash-hero-right { flex: 1; min-width: 320px; }
+.nanalstamp-dash-hero-skip { font-size: 0.75em; color: var(--text-muted); margin-top: 10px; }
+.nanalstamp-dash-gauge { position: relative; width: 148px; height: 148px; flex: none; }
+.nanalstamp-dash-gauge svg { display: block; }
+.nanalstamp-dash-gauge-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
+.nanalstamp-dash-gauge-pct { font-size: 2.1em; font-weight: 800; letter-spacing: -0.03em; line-height: 1; color: var(--text-normal); }
+.nanalstamp-dash-gauge-lbl { font-size: 0.78em; color: var(--text-muted); margin-top: 4px; }
+
+.nanalstamp-dash-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 12px; }
+.nanalstamp-dash-kpi .k { font-size: 0.78em; color: var(--text-muted); }
+.nanalstamp-dash-kpi .v { font-size: 1.5em; font-weight: 750; letter-spacing: -0.02em; line-height: 1.2; margin-top: 2px; }
+.nanalstamp-dash-kpi .d { font-size: 0.78em; margin-top: 3px; color: var(--text-muted); }
+
+.nanalstamp-dash-comp { display: flex; height: 14px; border-radius: 7px; overflow: hidden; gap: 2px; }
+.nanalstamp-dash-comp > div { height: 100%; }
+.nanalstamp-dash-comp .c1 { background: var(--ns-seal); }
+.nanalstamp-dash-comp .cp { background: var(--ns-info); }
+.nanalstamp-dash-comp .c2 { background: var(--ns-warn); }
+.nanalstamp-dash-comp .c3 { background: var(--ns-empty); }
+.nanalstamp-dash-comp-legend { display: flex; gap: 16px; margin-top: 8px; font-size: 0.8em; color: var(--text-muted); flex-wrap: wrap; }
+.nanalstamp-dash-comp-legend b { color: var(--text-normal); font-weight: 650; }
+.nanalstamp-dash-legend-item { display: inline-flex; align-items: center; gap: 7px; }
+.nanalstamp-dash-sw { width: 11px; height: 11px; border-radius: 3px; flex: none; display: inline-block; }
+
+/* 카드 격자(5장) */
+.nanalstamp-dash-grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.nanalstamp-dash-grid3 .span2 { grid-column: span 2; }
+.nanalstamp-dash-grid3 .span3 { grid-column: 1 / -1; }
+/* 잔디(내용 폭 고정) + 타임라인(나머지 전부) 한 줄 */
+.nanalstamp-dash-row2 { display: flex; gap: 14px; align-items: stretch; flex-wrap: wrap; }
+.nanalstamp-dash-row2 > .nanalstamp-card:first-child { flex: 0 0 auto; }
+.nanalstamp-dash-row2 > .nanalstamp-card:last-child { flex: 1 1 280px; min-width: 0; }
+.nanalstamp-dash-zoombtn { padding: 2px 7px; line-height: 0; display: inline-flex; align-items: center; }
+.nanalstamp-dash-zoombtn svg { width: 14px; height: 14px; }
+/* 확대 모드: 히트맵 셀 확대, 후보 이름칸 여유 */
+.nanalstamp-card.is-zoom .nanalstamp-dash-heat-cell { width: 24px; height: 24px; border-radius: 4px; }
+.nanalstamp-card.is-zoom .nanalstamp-dash-heat, .nanalstamp-card.is-zoom .nanalstamp-dash-heat .wk { gap: 4px; }
+@media (max-width: 760px) {
+  .nanalstamp-dash-grid3 { grid-template-columns: 1fr; }
+  .nanalstamp-dash-grid3 .span2 { grid-column: span 1; }
+  .nanalstamp-dash-kpis { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* 보호 공백 리스트 */
+.nanalstamp-dash-gaprow { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--background-modifier-border); font-size: 0.88em; }
+.nanalstamp-dash-gaprow:first-of-type { border-top: 0; }
+.nanalstamp-dash-gaprow .path { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-normal); cursor: pointer; }
+.nanalstamp-dash-gaprow .path:hover { text-decoration: underline; }
+.nanalstamp-dash-stripe { width: 3px; align-self: stretch; border-radius: 2px; flex: none; }
+.nanalstamp-dash-stripe.warn { background: var(--ns-warn); }
+.nanalstamp-dash-stripe.empty { background: var(--ns-empty); }
+.nanalstamp-dash-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 0.76em; padding: 2px 9px; border-radius: 20px; font-weight: 600; white-space: nowrap; }
+.nanalstamp-dash-chip.warn { background: color-mix(in srgb, var(--ns-warn) 16%, transparent); color: var(--ns-warn); }
+.nanalstamp-dash-chip.gray { background: var(--ns-track); color: var(--text-muted); }
+.nanalstamp-dash-chip.info { background: color-mix(in srgb, var(--ns-info) 16%, transparent); color: var(--ns-info); }
+.nanalstamp-dash-chips { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* 앵커 파이프라인(퍼널) */
+.nanalstamp-dash-funnel .frow { display: grid; grid-template-columns: 100px 1fr 48px; gap: 10px; align-items: center; margin: 9px 0; font-size: 0.85em; }
+.nanalstamp-dash-funnel .fbar { height: 16px; border-radius: 4px; }
+.nanalstamp-dash-funnel .fv { text-align: right; font-weight: 650; }
+.nanalstamp-dash-funnel .fk { color: var(--text-muted); }
+
+/* IP 타임라인 */
+.nanalstamp-dash-tl { display: grid; grid-template-columns: 100px 1fr; gap: 8px 12px; align-items: center; font-size: 0.85em; }
+.nanalstamp-dash-tl .name { color: var(--text-normal); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nanalstamp-dash-tl .track { position: relative; height: 22px; background: var(--ns-track); border-radius: 5px; }
+.nanalstamp-dash-tl .span { position: absolute; top: 4px; bottom: 4px; background: var(--ns-seal); border-radius: 4px; display: flex; align-items: center; min-width: 6px; }
+.nanalstamp-dash-tl .blk { font-size: 0.7em; color: #fff; padding: 0 7px; white-space: nowrap; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+/* 좁은 바의 라벨은 바 밖에 잉크색으로 — 트랙 기준 절대배치 */
+.nanalstamp-dash-tl .blk-out { position: absolute; top: 0; bottom: 0; display: inline-flex; align-items: center; font-size: 0.7em; color: var(--text-muted); white-space: nowrap; font-weight: 600; pointer-events: none; }
+.nanalstamp-dash-tl .axis { grid-column: 2; display: flex; justify-content: space-between; font-size: 0.72em; color: var(--text-muted); padding: 0 2px; }
+
+/* 봉인 연속성 히트맵 — GitHub 잔디 스타일(달력 정렬·5단계 농도·월/요일 라벨·범례) */
+.nanalstamp-dash-heat-wrap { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin-top: 8px; }
+.nanalstamp-dash-heat-days { display: flex; flex-direction: column; gap: 3px; font-size: 0.66em; color: var(--text-muted); padding-top: 18px; flex: none; }
+.nanalstamp-dash-heat-days span { height: 15px; line-height: 15px; }
+.nanalstamp-dash-heat-months { display: flex; gap: 3px; font-size: 0.7em; color: var(--text-muted); height: 15px; margin-bottom: 3px; }
+.nanalstamp-dash-heat-months span { width: 15px; flex: none; white-space: nowrap; overflow: visible; }
+.nanalstamp-dash-heat { display: flex; gap: 3px; }
+.nanalstamp-dash-heat .wk { display: flex; flex-direction: column; gap: 3px; flex: none; }
+.nanalstamp-dash-heat .cell, .nanalstamp-dash-heat-legend .cell { width: 15px; height: 15px; flex: none; border-radius: 3px; background: var(--ns-track); }
+.nanalstamp-dash-heat .cell.l1, .nanalstamp-dash-heat-legend .cell.l1 { background: color-mix(in srgb, var(--ns-seal) 35%, transparent); }
+.nanalstamp-dash-heat .cell.l2, .nanalstamp-dash-heat-legend .cell.l2 { background: color-mix(in srgb, var(--ns-seal) 55%, transparent); }
+.nanalstamp-dash-heat .cell.l3, .nanalstamp-dash-heat-legend .cell.l3 { background: color-mix(in srgb, var(--ns-seal) 78%, transparent); }
+.nanalstamp-dash-heat .cell.l4, .nanalstamp-dash-heat-legend .cell.l4 { background: var(--ns-seal); }
+.nanalstamp-dash-heat .cell.is-future { visibility: hidden; }
+.nanalstamp-dash-heat .cell:hover { outline: 2px solid var(--background-modifier-border-hover); }
+.nanalstamp-dash-heat-legend { display: flex; align-items: center; gap: 4px; margin-top: 10px; font-size: 0.72em; }
+.nanalstamp-dash-heat-legend .cell { width: 11px; height: 11px; border-radius: 2px; }
+
+/* 증명서 후보 */
+.nanalstamp-dash-cand { display: grid; grid-template-columns: 1fr 90px auto; gap: 8px 12px; align-items: center; font-size: 0.86em; }
+.nanalstamp-dash-cand h3 { grid-column: 1 / -1; }
+.nanalstamp-dash-cand .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-normal); }
+.nanalstamp-dash-cand .depth { display: flex; gap: 2px; }
+.nanalstamp-dash-cand .depth div { width: 10px; height: 14px; border-radius: 2px; background: var(--ns-seal); opacity: 0.9; }
+.nanalstamp-dash-cand .depth div.e { background: var(--ns-empty); opacity: 1; }
+
+/* 확정 버전 원문 뷰(ArchiveSourceView) — 하드코딩 색 금지, 테마 변수만(라이트/다크 동시 대응) */
+/* 루트=flex column: 배너는 고정 헤더(flex:none, 스크롤 밖), 본문만 스크롤(flex:1 + overflow) → 배너가 본문 사이에 겹치지 않음. */
+.nanalstamp-archive-source { height: 100%; display: flex; flex-direction: column; overflow: hidden; background: var(--background-primary); color: var(--text-normal); }
+.nanalstamp-archive-banner {
+  flex: none;
+  padding: 10px 16px;
+  background: var(--background-secondary);
+  border-bottom: 1px solid var(--background-modifier-border);
+  border-left: 3px solid var(--interactive-accent);
+  color: var(--text-muted); font-size: var(--font-ui-small);
+}
+.nanalstamp-archive-body { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 16px 24px; color: var(--text-normal); }
+/* stale 안내(뷰 상태 없음)만 루트 직속 — 스크롤 본문이 없으므로 여백 보정 */
+.nanalstamp-archive-source > .nanalstamp-archive-note { padding: 16px; }
+.nanalstamp-archive-md { max-width: var(--file-line-width, 700px); margin: 0 auto; }
+.nanalstamp-archive-note { color: var(--text-muted); }
+.nanalstamp-archive-img { display: block; margin: 0 auto; max-width: 100%; height: auto; }
+.nanalstamp-source-view {
+  background: var(--background-primary-alt);
+  border: 1px solid var(--background-modifier-border);
+  color: var(--text-normal);
+  border-radius: var(--radius-s);
+  padding: 12px; max-height: 70vh; overflow: auto; white-space: pre-wrap;
+}
+
+/* 증명 모달(ProofModal) — 확대·외곽·정돈. 하드코딩 색 금지, 테마 변수만(라이트/다크 대응).
+   특이도를 .modal 과 함께 올려 Obsidian 기본 폭 규칙을 확실히 이긴다. */
+.modal.nanalstamp-proof-modal {
+  width: min(760px, 94vw);
+  max-width: 94vw;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-l);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+}
+/* .modal-content(=contentEl)를 헤더 / 스크롤 본문 / 고정 푸터의 flex column 으로 */
+.modal.nanalstamp-proof-modal .modal-content.nanalstamp-proof-content {
+  display: flex;
+  flex-direction: column;
+  max-height: 82vh;
+  padding: 0;                 /* 내부 섹션이 자체 padding */
+  overflow: hidden;           /* 스크롤은 본문(.nanalstamp-proof-body)만 */
+}
+.nanalstamp-proof-header { flex: none; padding: 18px 22px 12px; border-bottom: 1px solid var(--background-modifier-border); }
+.nanalstamp-proof-header h2 { margin: 0 0 2px; font-size: 1.25em; }
+.nanalstamp-proof-file { color: var(--text-muted); font-size: 0.9em; word-break: break-all; }
+.nanalstamp-proof-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 14px 22px 18px; font-size: 0.9em; }
+.nanalstamp-proof-footer { flex: none; display: flex; justify-content: flex-end; gap: 8px; padding: 12px 22px; border-top: 1px solid var(--background-modifier-border); }
+.nanalstamp-proof-body hr { margin: 14px 0; border: none; border-top: 1px solid var(--background-modifier-border); }
+.nanalstamp-proof-body .setting-item-name { font-size: 0.95em; font-weight: 600; margin: 0 0 4px; }
+.nanalstamp-proof-body .setting-item-description { color: var(--text-muted); font-size: 0.9em; margin: 4px 0; }
+
+/* 상태 칩: 봉인됨 등 — 이모지 대신 색 점 + 배경 칩 */
+.nanalstamp-proof-chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 0.95em; font-weight: 600;
+  padding: 4px 12px; border-radius: 999px;
+  background: var(--background-modifier-border); color: var(--text-normal);
+  margin: 2px 0 12px;
+}
+.nanalstamp-proof-chip::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); }
+.nanalstamp-proof-chip.is-sealed { background: color-mix(in srgb, var(--color-green) 18%, transparent); color: var(--color-green); }
+.nanalstamp-proof-chip.is-sealed::before { background: var(--color-green); }
+.nanalstamp-proof-chip.is-changed, .nanalstamp-proof-chip.is-pending { background: color-mix(in srgb, var(--color-yellow) 18%, transparent); color: var(--color-yellow); }
+.nanalstamp-proof-chip.is-changed::before, .nanalstamp-proof-chip.is-pending::before { background: var(--color-yellow); }
+
+/* 상태 정보: 라벨:값 2열 그리드 */
+.nanalstamp-proof-status { display: grid; grid-template-columns: max-content 1fr; gap: 5px 16px; margin: 0 0 6px; }
+.nanalstamp-proof-status .k { color: var(--text-muted); }
+.nanalstamp-proof-status .v { color: var(--text-normal); font-variant-numeric: tabular-nums; }
+
+/* 봉인 이력 — 본문이 스크롤을 담당하므로 리스트 자체는 높이 제한 없이 자연 확장 */
+.nanalstamp-hist-sentinel { height: 1px; }
+.nanalstamp-hist-loading { text-align: center; margin: 8px 0; color: var(--text-muted); font-size: 0.9em; }
+/* 이력 행: 촘촘한 밀도 + 날짜(강조)/메타(muted) 위계 + hover + 우측 버튼 */
+.nanalstamp-hist-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 7px 8px; margin: 0 -8px;
+  border-radius: 6px;
+  border-bottom: 1px solid var(--background-modifier-border-hover, var(--background-modifier-border));
+}
+.nanalstamp-hist-row:last-child { border-bottom: none; }
+.nanalstamp-hist-row:hover { background: var(--background-modifier-hover); }
+.nanalstamp-hist-main { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.nanalstamp-hist-when { color: var(--text-normal); font-variant-numeric: tabular-nums; font-size: 0.92em; }
+.nanalstamp-hist-meta { display: inline-flex; align-items: baseline; gap: 8px; color: var(--text-muted); font-size: 0.82em; font-variant-numeric: tabular-nums; }
+/* 확정(비트코인 앵커됨): ₿ 블록을 액센트 색·좌측 점으로 강조 */
+.nanalstamp-hist-btc { color: var(--text-accent); font-weight: 600; }
+.nanalstamp-hist-row.is-confirmed .nanalstamp-hist-when::before {
+  content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--color-green); margin-right: 7px; vertical-align: middle;
+}
+/* 대기(아직 앵커 미확정): 텍스트만 흐리게 — 버튼까지 흐리면 비활성화처럼 보인다(원문 보기는 항상 활성) */
+.nanalstamp-hist-row.is-pending .nanalstamp-hist-main { opacity: 0.6; }
+.nanalstamp-hist-row.is-pending .nanalstamp-hist-when::before {
+  content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  border: 1.5px solid var(--text-muted); margin-right: 7px; vertical-align: middle;
+}
+.nanalstamp-hist-wait { font-style: italic; }
+.nanalstamp-hist-btn { flex: none; margin-left: auto; font-size: 0.82em; padding: 3px 10px; }
+/* B: 저장처별 원문 보기 버튼 묶음(로컬/GitHub/nanalStamp) — 행 우측에 나란히 */
+.nanalstamp-hist-srcs { flex: none; margin-left: auto; display: flex; gap: 6px; }
+.nanalstamp-hist-srcs .nanalstamp-hist-btn { margin-left: 0; }

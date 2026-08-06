@@ -48,6 +48,7 @@ The API server URL is configurable in settings (advanced — staging/proxy setup
 **When requests happen:**
 - When a watched note settles (debounced), when you leave or close it, and a "catch-up" pass for notes changed since last run.
 - When you explicitly run a command (issue certificate, create public link, anchor now, build a submission package, open pricing/account).
+- When you quit Obsidian with an unsent seal pending, the final seal goes out via `navigator.sendBeacon` — the only delivery that reliably completes during app shutdown. Same single API host, hash-only payload; this is a seal, not analytics (the plugin has no analytics at all).
 
 You can turn all sending off at any time with **Settings → nanalStamp → Enable sealing**, and you can limit *which* notes are watched with the include/exclude folder settings.
 

@@ -5,7 +5,7 @@
 // 설계: docs/superpowers/specs/2026-07-20-crypto-shredding-design.md
 
 export const ENC_MAGIC = new Uint8Array([0x4e, 0x53, 0x45, 0x31]); // "NSE1"
-export type EncDomain = "blob" | "manifest";
+export type EncDomain = "blob" | "manifest" | "name" | "vault" | "scope";
 
 // 경계값: >= 4(매직) + 16(GCM 태그 최소 길이). "> 20"이 아니라 ">= 20"을 택한 이유는
 // 빈 평문(0바이트)의 암호문이 정확히 매직 4B + 태그 16B = 20B가 되기 때문 — 빈 파일도
@@ -33,8 +33,9 @@ async function deriveKeyNonce(dekB64: string, domain: EncDomain, plainHash: stri
 
 /**
  * 평문 → NSE1 ‖ AES-256-GCM(ct‖tag). 결정적(수렴).
- * 호출자는 plainHash === sha256(data)를 반드시 보장할 것 — 위반 시 같은 (키,nonce)로
- * 다른 평문이 암호화되어 GCM 안전성이 붕괴한다.
+ * 호출자 계약: plainHash는 data를 유일 결정하는 충돌저항적 커밋먼트여야 한다
+ * (blob/manifest: plainHash === sha256(data), name: plainHash === 경로해시이고 data === 그 경로 원문).
+ * 위반 시 같은 (키,nonce)로 다른 평문이 암호화되어 GCM 안전성이 붕괴한다.
  */
 export async function encryptBlob(dekB64: string, plainHash: string, domain: EncDomain, data: Uint8Array): Promise<Uint8Array> {
   const { key, nonce } = await deriveKeyNonce(dekB64, domain, plainHash);

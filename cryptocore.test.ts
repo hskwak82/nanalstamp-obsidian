@@ -44,3 +44,36 @@ test("경계: 빈 평문도 NSE1 프레임(매직4+태그16=20B)으로 라운드
   assert.ok(isEncrypted(ct));
   assert.deepEqual(await decryptBlob(DEK, HASH, "blob", ct), empty);
 });
+
+// "name" 도메인 — 노트명(경로) 암호화. plainHash 자리는 path_hash(경로해시):
+// path_hash가 경로를 유일 결정하므로 같은 (키,nonce)에 다른 평문이 들어갈 수 없다(수렴 계약의 경로판).
+test("name 도메인: 라운드트립 + blob과 분리", async () => {
+  const pathHash = "c".repeat(64);
+  const name = new TextEncoder().encode("10-Records/2026-07-15-01.md");
+  const enc = await encryptBlob(DEK, pathHash, "name", name);
+  assert.ok(isEncrypted(enc));
+  const dec = await decryptBlob(DEK, pathHash, "name", enc);
+  assert.equal(new TextDecoder().decode(dec), "10-Records/2026-07-15-01.md");
+  // 같은 입력의 blob 도메인 암호문과 달라야 한다(도메인 분리)
+  const encBlob = await encryptBlob(DEK, pathHash, "blob", name);
+  assert.notDeepEqual(enc, encBlob);
+});
+
+test("name 도메인: 다른 path_hash 키로는 복호 실패", async () => {
+  const enc = await encryptBlob(DEK, "c".repeat(64), "name", new TextEncoder().encode("a.md"));
+  await assert.rejects(() => decryptBlob(DEK, "d".repeat(64), "name", enc));
+  await assert.rejects(() => decryptBlob(DEK2, "c".repeat(64), "name", enc));
+});
+
+// "vault" 도메인 — vault 이름 암호화. plainHash 자리는 vault 이름 자체의 해시(경로해시와 동일 원리):
+// vault_hash가 이름을 유일 결정하므로 같은 (키,nonce)에 다른 평문이 들어갈 수 없다.
+test("vault 도메인: 라운드트립 + name 도메인과 분리", async () => {
+  const vaultHash = "e".repeat(64);
+  const name = new TextEncoder().encode("nanalStampTest");
+  const enc = await encryptBlob(DEK, vaultHash, "vault", name);
+  const dec = await decryptBlob(DEK, vaultHash, "vault", enc);
+  assert.equal(new TextDecoder().decode(dec), "nanalStampTest");
+  const encName = await encryptBlob(DEK, vaultHash, "name", name);
+  assert.notDeepEqual(enc, encName); // 도메인 분리(결정적 파생이라 바이트 비교가 유효)
+  await assert.rejects(() => decryptBlob(DEK, "f".repeat(64), "vault", enc));
+});

@@ -1,2 +1,3 @@
-.testbuild/
 node_modules/
+.testbuild/
+main.js

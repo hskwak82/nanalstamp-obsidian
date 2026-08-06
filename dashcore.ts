@@ -161,25 +161,114 @@ export function heatmapCounts(counts: Record<string, number>, todayIso: string, 
   return grid;
 }
 
-export type SyncStatus = { confirmed: number; archivePending: number; mirrorPending: number; latestBlock: number };
+export type SyncStatus = {
+  confirmed: number;
+  archivePending: number;
+  mirrorPending: number;
+  latestBlock: number;
+  nanalDone: number;    // nanal 스토리지 보관 완료(대상 중 최신 해시로 업로드됨)
+  nanalPending: number; // nanal 스토리지 보관 대기(대상이지만 아직 안 됐거나 구 해시)
+};
 
-// 동기화 상태: 확정 증명(ledgerIndex) 대비 로컬 git 아카이브/GitHub 미러가 따라왔는지.
+// 동기화 상태: 확정 증명(ledgerIndex) 대비 로컬 git 아카이브/GitHub 미러/nanal 스토리지가 따라왔는지.
 // "대기"는 해당 인덱스에 없거나 구(舊) 해시인 경우 — recordConfirmedProof/sweep이 곧 채울 대상.
+// nanalIndex=null이면 스토리지가 꺼진 상태 — nanalDone/nanalPending은 항상 0(호출부가 카드 표시 자체를 별도 게이트로 숨긴다).
+// nanalEligible: 이 경로가 "원문 소급 보관" 대상인가(nanalBackfill=false면 호출부가 nanalSince 이후 mtime만 true로 주입).
 export function syncStatus(
   ledgerIndex: Record<string, string>,
   archiveIndex: Record<string, string>,
   mirrorIndex: Record<string, string>,
   entries: ArchiveEntry[],
+  nanalIndex: Record<string, string> | null,
+  nanalEligible: (path: string) => boolean,
 ): SyncStatus {
-  let archivePending = 0, mirrorPending = 0;
+  let archivePending = 0, mirrorPending = 0, nanalDone = 0, nanalPending = 0;
   for (const [p, h] of Object.entries(ledgerIndex)) {
     if (archiveIndex[p] !== h) archivePending++;
     if (mirrorIndex[p] !== h) mirrorPending++;
+    if (nanalIndex && nanalEligible(p)) {
+      if (nanalIndex[p] === h) nanalDone++;
+      else nanalPending++;
+    }
   }
   let latestBlock = 0;
   for (const e of entries) {
     const b = numBlock(e.block);
     if (b > latestBlock) latestBlock = b;
   }
-  return { confirmed: Object.keys(ledgerIndex).length, archivePending, mirrorPending, latestBlock };
+  return { confirmed: Object.keys(ledgerIndex).length, archivePending, mirrorPending, latestBlock, nanalDone, nanalPending };
+}
+
+// ── digest 주기(2026-08-02) ──────────────────────────────────────────────────
+// 팀이 주간·월간·분기 중에서 고른다(끄기 포함). 표기는 **서버 digests.rs::period_key 와
+// 한 글자도 다르면 안 된다** — 어긋나면 팀원이 쓴 글이 서버 눈에는 다른 기간이라
+// 영원히 미작성으로 남는다. 그래서 양쪽에 같은 벡터로 테스트를 걸어 뒀다.
+export type Cadence = "none" | "weekly" | "monthly" | "quarterly";
+
+/// "YYYY-MM-DD" → 그 날짜가 속한 기간 이름.
+export function periodKey(cadence: string, ymd: string): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  if (cadence === "quarterly") return `${y}-Q${Math.floor((m - 1) / 3) + 1}`;
+  if (cadence !== "weekly") return `${y}-${String(m).padStart(2, "0")}`;
+  // ISO 주 — 월요일 시작, 그 주 목요일이 속한 해. 연구노트 서식의 `기간: YYYY-Www`와 같은 규약.
+  const t = new Date(Date.UTC(y, m - 1, d));
+  const dow = (t.getUTCDay() + 6) % 7;                 // 월=0
+  t.setUTCDate(t.getUTCDate() - dow + 3);              // 그 주 목요일
+  const firstThu = new Date(Date.UTC(t.getUTCFullYear(), 0, 4));
+  const fDow = (firstThu.getUTCDay() + 6) % 7;
+  firstThu.setUTCDate(firstThu.getUTCDate() - fDow + 3);
+  const week = 1 + Math.round((t.getTime() - firstThu.getTime()) / (7 * 86400000));
+  return `${t.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+}
+
+/// **직전** 기간 — 쓸 대상이다. 진행 중인 기간을 대상으로 삼으면 달이 시작하자마자
+/// "안 썼다"고 독촉하게 된다(아직 쓸 수 없는 글이다).
+export function previousPeriod(cadence: string, ymd: string): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  if (cadence === "weekly") {
+    const t = new Date(Date.UTC(y, m - 1, d - 7));
+    return periodKey(cadence, `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, "0")}-${String(t.getUTCDate()).padStart(2, "0")}`);
+  }
+  // 이번 기간 첫날의 하루 전 = 직전 기간의 마지막 날.
+  const firstMonth = cadence === "quarterly" ? Math.floor((m - 1) / 3) * 3 + 1 : m;
+  const t = new Date(Date.UTC(y, firstMonth - 1, 0));   // day 0 = 전달 말일
+  return periodKey(cadence, `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, "0")}-${String(t.getUTCDate()).padStart(2, "0")}`);
+}
+
+/// 사람이 읽는 기간 이름 — 「2026-07」은 파일명이고, 화면에는 「2026년 7월」로 쓴다.
+export function periodLabel(period: string): string {
+  const [y, rest] = period.split("-");
+  if (rest?.startsWith("Q")) return `${y}년 ${rest.slice(1)}분기`;
+  if (rest?.startsWith("W")) return `${y}년 ${Number(rest.slice(1))}주`;
+  return `${y}년 ${Number(rest)}월`;
+}
+
+// ── 월간 digest 통계(main.ts에서 이동, 2026-07-26) ───────────────────────────
+// 번역 사전(i18n.ts digestScaffold)이 DigestStats를 참조하므로 순수 모듈에 둔다 —
+// main.ts에 두면 i18n.ts → main.ts 역참조가 생긴다.
+// 5.2: 월간 digest 자동 통계 — 로컬 아카이브 원장(ArchiveEntry[])을 대상 월(YYYY-MM, 로컬)로 필터 집계.
+// 순수 함수(타임존·테스트 결정성): ts→로컬 YYYY-MM-DD 변환기를 호출자가 주입한다(서버 호출 없음).
+// seals=봉인(앵커) 건수, activeDays=봉인한 날 수, artifacts=서로 다른 노트 수, topFolders=상위 3개 폴더(건수).
+export type DigestStats = { seals: number; activeDays: number; artifacts: number; topFolders: { folder: string; count: number }[] };
+export function computeDigestStats(entries: ArchiveEntry[], ym: string, ymdOf: (ts: number) => string,
+                                   cadence: string = "monthly"): DigestStats {
+  const days = new Set<string>();
+  const notes = new Set<string>();
+  const folders = new Map<string, number>();
+  let seals = 0;
+  for (const e of entries) {
+    // 기간 판정은 periodKey 하나로 — 파일명만 주기를 따르고 통계는 달로 두면
+    // 「2026-W31.md 인데 내용은 7월 전체」가 된다(2026-08-02).
+    if (periodKey(cadence, ymdOf(e.ts)) !== ym) continue;
+    seals++;
+    days.add(ymdOf(e.ts));
+    notes.add(e.notePath);
+    const f = topFolder(e.notePath);
+    folders.set(f, (folders.get(f) ?? 0) + 1);
+  }
+  const topFolders = [...folders.entries()]
+    .map(([folder, count]) => ({ folder, count }))
+    .sort((a, b) => b.count - a.count || a.folder.localeCompare(b.folder))
+    .slice(0, 3);
+  return { seals, activeDays: days.size, artifacts: notes.size, topFolders };
 }

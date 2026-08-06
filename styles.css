@@ -202,12 +202,36 @@
 .nanalstamp-dash-chips { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
 
 /* 앵커 파이프라인(퍼널) */
-.nanalstamp-dash-funnel .frow { display: grid; grid-template-columns: 100px 1fr 48px; gap: 10px; align-items: center; margin: 9px 0; font-size: 0.85em; }
+.nanalstamp-dash-funnel .fsec { margin: 16px 0 4px; padding-top: 12px; border-top: 1px solid var(--ns-track); font-size: 0.78em; font-weight: 700; letter-spacing: 0.05em; color: var(--interactive-accent); }
+.nanalstamp-dash-funnel .fsec:first-child { margin-top: 2px; padding-top: 0; border-top: none; }
+.nanalstamp-dash-funnel .frow { display: grid; grid-template-columns: 1fr max-content max-content; gap: 12px; align-items: baseline; margin: 9px 0; font-size: 0.88em; }
+.nanalstamp-dash-info { color: var(--text-faint); font-size: 0.85em; }
+/* 자체 즉시 툴팁 — Obsidian 툴팁 시각 언어 준수, \n은 정의된 그대로(pre-line) */
+.nanalstamp-tip {
+  position: fixed; z-index: 9999; display: none;
+  background: var(--background-modifier-message, #1f1f1f); color: #fff;
+  padding: 6px 10px; border-radius: 6px; font-size: 12.5px; line-height: 1.5;
+  white-space: pre-line; max-width: 340px; pointer-events: none;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+}
+.nanalstamp-dash-funnel .fk.is-click { cursor: pointer; }
+.nanalstamp-dash-funnel .fk.is-click:hover { text-decoration: underline dotted; color: var(--text-normal); }
+.nanalstamp-dash-funnel .fden { color: var(--text-faint); font-size: 0.85em; font-weight: 400; }
+.nanalstamp-dash-funnel .fextra { color: var(--text-faint); font-size: 0.82em; }
+.nanalstamp-dash-funnel .flife { margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--ns-track); color: var(--text-muted); font-size: 0.82em; }
+.nanalstamp-dash-funnel .fpend { text-align: right; font-size: 0.82em; color: var(--text-faint); }
+.nanalstamp-dash-funnel .fpend.warn { color: var(--ns-warn); font-weight: 650; }
 .nanalstamp-dash-funnel .fbar { height: 16px; border-radius: 4px; }
 .nanalstamp-dash-funnel .fv { text-align: right; font-weight: 650; }
 .nanalstamp-dash-funnel .fk { color: var(--text-muted); }
 
 /* IP 타임라인 */
+.nanalstamp-dash-tl-list { display: flex; flex-direction: column; font-size: 0.88em; }
+.nanalstamp-dash-tl-list .row { display: flex; align-items: baseline; gap: 12px; padding: 7px 2px; border-bottom: 1px solid var(--ns-track); }
+.nanalstamp-dash-tl-list .row:last-child { border-bottom: none; }
+.nanalstamp-dash-tl-list .name { flex: 1; min-width: 0; color: var(--text-normal); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nanalstamp-dash-tl-list .since { color: var(--ns-seal); font-weight: 600; }
+.nanalstamp-dash-tl-list .cnt { color: var(--text-muted); font-size: 0.9em; }
 .nanalstamp-dash-tl { display: grid; grid-template-columns: 100px 1fr; gap: 8px 12px; align-items: center; font-size: 0.85em; }
 .nanalstamp-dash-tl .name { color: var(--text-normal); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nanalstamp-dash-tl .track { position: relative; height: 22px; background: var(--ns-track); border-radius: 5px; }
@@ -218,7 +242,12 @@
 .nanalstamp-dash-tl .axis { grid-column: 2; display: flex; justify-content: space-between; font-size: 0.72em; color: var(--text-muted); padding: 0 2px; }
 
 /* 봉인 연속성 히트맵 — GitHub 잔디 스타일(달력 정렬·5단계 농도·월/요일 라벨·범례) */
-.nanalstamp-dash-heat-wrap { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin-top: 8px; }
+.nanalstamp-dash-heat-wrap { display: flex; gap: 8px; padding-bottom: 4px; margin-top: 8px; }
+/* 우측(월 라벨+잔디)만 스크롤 — 요일 레일 고정. 축소 카드는 스크롤바 숨김+드래그 팬, 확대는 스크롤바 노출 */
+.nanalstamp-dash-heat-right { overflow-x: auto; cursor: grab; user-select: none; }
+.nanalstamp-dash-heat-right:active { cursor: grabbing; }
+.nanalstamp-card:not(.is-zoom) .nanalstamp-dash-heat-right { scrollbar-width: none; }
+.nanalstamp-card:not(.is-zoom) .nanalstamp-dash-heat-right::-webkit-scrollbar { display: none; }
 .nanalstamp-dash-heat-days { display: flex; flex-direction: column; gap: 3px; font-size: 0.66em; color: var(--text-muted); padding-top: 18px; flex: none; }
 .nanalstamp-dash-heat-days span { height: 15px; line-height: 15px; }
 .nanalstamp-dash-heat-months { display: flex; gap: 3px; font-size: 0.7em; color: var(--text-muted); height: 15px; margin-bottom: 3px; }
@@ -258,7 +287,18 @@
 /* stale 안내(뷰 상태 없음)만 루트 직속 — 스크롤 본문이 없으므로 여백 보정 */
 .nanalstamp-archive-source > .nanalstamp-archive-note { padding: 16px; }
 .nanalstamp-archive-md { max-width: var(--file-line-width, 700px); margin: 0 auto; }
+/* 인라인 제목 — Obsidian 코어 .inline-title 변수 상속(테마 동일), 코어 스타일 미적용 컨텍스트 폴백 */
+.nanalstamp-archive-md .inline-title {
+  font-size: var(--inline-title-size, 1.8em);
+  font-weight: var(--inline-title-weight, 700);
+  color: var(--inline-title-color, var(--text-normal));
+  line-height: var(--inline-title-line-height, 1.2);
+  margin-bottom: var(--inline-title-margin-bottom, 0.5em);
+}
 .nanalstamp-archive-note { color: var(--text-muted); }
+/* 봉인 세계 내부 링크(깊은 중첩 임베드의 링크화 표시) — Obsidian 링크와 동일한 시각 언어 */
+.nanalstamp-restore-line { margin: 2px 0; }
+.nanalstamp-sealed-link { color: var(--link-color, var(--text-accent)); text-decoration: underline; cursor: pointer; }
 .nanalstamp-archive-img { display: block; margin: 0 auto; max-width: 100%; height: auto; }
 .nanalstamp-source-view {
   background: var(--background-primary-alt);
@@ -343,5 +383,673 @@
 .nanalstamp-hist-wait { font-style: italic; }
 .nanalstamp-hist-btn { flex: none; margin-left: auto; font-size: 0.82em; padding: 3px 10px; }
 /* B: 저장처별 원문 보기 버튼 묶음(로컬/GitHub/nanalStamp) — 행 우측에 나란히 */
-.nanalstamp-hist-srcs { flex: none; margin-left: auto; display: flex; gap: 6px; }
+.nanalstamp-hist-srcs { flex: none; margin-left: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; } /* 그날로: [복원] 추가로 버튼 4개 가능 — 좁은 창에서 줄바꿈 */
 .nanalstamp-hist-srcs .nanalstamp-hist-btn { margin-left: 0; }
+
+/* ── 업무 요청함 패널(§7b Work Inbox) — 목업 request-inbox-panel-mockup.html 톤을 Obsidian 변수로 ── */
+/* 리본 배지: 미처리(접수 대기 + 마감 초과) 수 — 사라지지 않는 자리(목업 장면 1) */
+.nanalstamp-task-ribbon { position: relative; }
+.nanalstamp-task-ribbon-badge {
+  position: absolute; top: -2px; right: -4px;
+  background: var(--color-red); color: #fff;
+  font-size: 9px; font-weight: 700; line-height: 1.5;
+  border-radius: 8px; padding: 0 4px; pointer-events: none;
+}
+/* 봉인이 **멈춰 있는** 상태는 사용자가 놓치면 안 된다. 9px 배지 하나로는 눈에 안 들어와서
+   (2026-07-29 지적) 리본 아이콘 자체를 경고색으로 두르고 배지도 키운다. 애니메이션은 쓰지
+   않는다 — 늘 떠 있는 진입점이라 움직이면 방해가 된다. */
+.nanalstamp-ribbon-warn {
+  /* 테두리로 두른다 — 배경을 꽉 채우면 로고가 묻혀 무엇을 누르는 자리인지 알아보기 어렵다. */
+  box-shadow: 0 0 0 2px var(--text-error) !important;
+  border-radius: var(--radius-s);
+  background: transparent !important;
+}
+.nanalstamp-task-ribbon-badge.is-warn {
+  top: -4px; right: -5px; font-size: 11px; padding: 0 5px;
+  box-shadow: 0 0 0 1.5px var(--background-secondary);
+}
+.nanalstamp-task-panel { display: flex; flex-direction: column; height: 100%; padding: 0; }
+.nanalstamp-task-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--background-modifier-border); flex-wrap: nowrap; }
+.nanalstamp-task-head-emoji { flex: 0 0 auto; }
+.nanalstamp-task-head-title { font-weight: 600; font-size: 0.95em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.nanalstamp-task-new { margin-left: auto; background: var(--interactive-accent); color: var(--text-on-accent); border: 0; border-radius: 5px; padding: 3px 9px; font-size: 0.85em; font-weight: 600; cursor: pointer; white-space: nowrap; flex: 0 0 auto; display: inline-flex; align-items: center; gap: 3px; }
+/* 첫 버튼만 margin-left:auto로 우측 정렬, 나머지는 그 옆에 붙는다(중복 auto 제거). */
+.nanalstamp-task-new ~ .nanalstamp-task-new { margin-left: 0; }
+/* 짧은 캡션은 넓은 헤더(중앙)에선 숨김 — 풀 라벨(.label)이 뜻을 전한다. */
+.nanalstamp-task-btn-short { display: none; }
+/* 좁은 사이드바: 풀 라벨 숨김 → 아이콘 위 + 짧은 캡션 아래(2줄, 작은 폰트). 과제/팀 폴더 둘 다 📁라
+   캡션("과제"/"팀")으로 구분한다(§3). 캡션이 없는 버튼은 아이콘만 남고 title 툴팁이 뜻을 유지. */
+.nanalstamp-task-head.is-icononly .nanalstamp-task-btn-label { display: none; }
+.nanalstamp-task-head.is-icononly .nanalstamp-task-new { flex-direction: column; gap: 1px; padding: 3px 6px; line-height: 1.15; }
+.nanalstamp-task-head.is-icononly .nanalstamp-task-btn-short { display: block; font-size: var(--font-ui-smaller); font-weight: 500; }
+.nanalstamp-task-tabs { display: flex; gap: 2px; padding: 8px 10px 0; border-bottom: 1px solid var(--background-modifier-border); }
+.nanalstamp-task-tab { background: none; border: none; box-shadow: none; color: var(--text-muted); font-size: 0.88em; padding: 5px 10px 7px; cursor: pointer; border-bottom: 2px solid transparent; border-radius: 0; }
+.nanalstamp-task-tab.is-on { color: var(--text-normal); border-bottom-color: var(--interactive-accent); font-weight: 600; }
+.nanalstamp-task-tab-n { background: var(--background-modifier-hover); border-radius: 8px; padding: 0 6px; font-size: 0.85em; margin-left: 4px; }
+.nanalstamp-task-tab-n.is-hot { background: var(--color-red); color: #fff; }
+.nanalstamp-task-scroll { flex: 1; overflow-y: auto; padding: 10px; }
+.nanalstamp-task-sec { font-size: 0.78em; font-weight: 700; letter-spacing: 0.05em; color: var(--text-faint); margin: 14px 4px 6px; text-transform: uppercase; }
+.nanalstamp-task-sec:first-child { margin-top: 2px; }
+.nanalstamp-task-sec.is-alert { color: var(--color-red); }
+.nanalstamp-task-card { background: var(--background-secondary); border: 1px solid var(--background-modifier-border); border-radius: 7px; padding: 10px 11px; margin-bottom: 8px; }
+.nanalstamp-task-card.is-overdue { border-color: color-mix(in srgb, var(--color-red) 55%, transparent); }
+.nanalstamp-task-title { font-size: 0.95em; font-weight: 600; line-height: 1.4; margin-bottom: 5px; cursor: pointer; }
+.nanalstamp-task-meta { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; font-size: 0.82em; color: var(--text-muted); }
+.nanalstamp-task-due { font-weight: 600; }
+.nanalstamp-task-due.is-overdue { color: var(--color-red); }
+.nanalstamp-task-due.is-today { color: var(--color-yellow); }
+.nanalstamp-task-pill, .nanalstamp-task-st { border-radius: 4px; padding: 0 6px; font-size: 0.95em; font-weight: 600; line-height: 1.7; }
+.nanalstamp-task-pill.is-now { background: rgba(233, 106, 106, 0.12); color: var(--color-red); }
+.nanalstamp-task-pill.is-week { background: rgba(106, 166, 233, 0.12); color: var(--color-blue); }
+.nanalstamp-task-pill.is-ref { background: var(--background-primary); color: var(--text-faint); border: 1px solid var(--background-modifier-border); }
+.nanalstamp-task-st.is-wait { background: rgba(217, 169, 68, 0.12); color: var(--color-yellow); }
+.nanalstamp-task-st.is-acc { background: rgba(106, 166, 233, 0.12); color: var(--color-blue); }
+.nanalstamp-task-st.is-done { background: rgba(109, 191, 116, 0.12); color: var(--color-green); }
+.nanalstamp-task-st.is-declined { background: rgba(233, 106, 106, 0.12); color: var(--color-red); }
+.nanalstamp-task-replies { cursor: pointer; }
+/* 표(넓게 보기)의 회신 수 — 제목 옆에 붙는다(2026-08-06). 카드 뷰에만 있어서 넓게 보기로
+   바꾸면 회신이 왔는지 알 수 없었다. 포털 업무함 표와 같은 자리·같은 크기. */
+.nanalstamp-tv-replies {
+  cursor: pointer; margin-left: 7px; font-size: 0.85em;
+  color: var(--text-muted); white-space: nowrap;
+}
+.nanalstamp-tv-replies:hover { color: var(--text-normal); }
+/* 안읽음 빨간 점(읽음 배지 2026-08-06) — 카드·표·컴팩트·보드 네 렌더러 공통. 판정은 taskcore.isUnread. */
+.nanalstamp-unread-dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--color-red); margin-right: 6px; vertical-align: middle; flex-shrink: 0;
+}
+/* §3: 업무 카드의 연구과제 태그 — 제목 옆 회색 작은 pill */
+.nanalstamp-task-proj { display: inline-block; margin-left: 6px; border-radius: 4px; padding: 0 6px; font-size: 0.75em; font-weight: 500; line-height: 1.7; vertical-align: middle; background: var(--background-primary); color: var(--text-muted); border: 1px solid var(--background-modifier-border); }
+.nanalstamp-task-declined { margin-top: 6px; font-size: 0.82em; color: var(--color-red); }
+.nanalstamp-task-note { margin-top: 5px; font-size: 0.82em; color: var(--text-accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nanalstamp-task-acts { display: flex; gap: 6px; margin-top: 9px; }
+.nanalstamp-task-act { flex: 1; border: 1px solid var(--background-modifier-border); background: var(--background-primary); color: var(--text-normal); border-radius: 5px; padding: 4px 0; font-size: 0.85em; cursor: pointer; box-shadow: none; }
+.nanalstamp-task-act.is-pri { background: var(--interactive-accent); border-color: var(--interactive-accent); color: var(--text-on-accent); font-weight: 600; }
+.nanalstamp-task-act.is-done { background: rgba(109, 191, 116, 0.12); border-color: rgba(109, 191, 116, 0.4); color: var(--color-green); font-weight: 600; }
+.nanalstamp-task-fold { color: var(--text-faint); font-size: 0.85em; padding: 6px 4px; cursor: pointer; }
+.nanalstamp-task-foot { border-top: 1px solid var(--background-modifier-border); padding: 7px 12px; font-size: 0.78em; color: var(--text-faint); display: flex; justify-content: space-between; }
+.nanalstamp-task-foot a { color: var(--text-faint); text-decoration: none; }
+.nanalstamp-task-state { color: var(--text-muted); font-size: 0.88em; margin: 8px 4px; }
+.nanalstamp-task-state.is-tip { color: var(--text-faint); }
+.nanalstamp-task-thread { margin-top: 9px; border-top: 1px solid var(--background-modifier-border); padding-top: 8px; }
+.nanalstamp-task-body { font-size: 0.85em; color: var(--text-normal); white-space: pre-wrap; margin-bottom: 6px; }
+.nanalstamp-task-body.is-memo { color: var(--text-muted); }
+.nanalstamp-task-done-comment { font-size: 0.82em; color: var(--color-green); margin-bottom: 6px; white-space: pre-wrap; }
+.nanalstamp-task-reopened { font-size: 0.82em; color: var(--color-red); margin-bottom: 6px; white-space: pre-wrap; }
+.nanalstamp-task-reply { margin: 6px 0; }
+.nanalstamp-task-reply-meta { font-size: 0.75em; color: var(--text-faint); }
+.nanalstamp-task-reply-body { font-size: 0.85em; white-space: pre-wrap; }
+.nanalstamp-task-reply-form { display: flex; gap: 6px; margin-top: 6px; align-items: flex-end; }
+.nanalstamp-task-reply-input { flex: 1; resize: vertical; font-size: 0.85em; }
+.nanalstamp-task-reply-form .nanalstamp-task-act { flex: none; padding: 4px 12px; }
+/* ── 업무함 통합 뷰(Task 6~) — 유형 배지·뷰 세그먼트·노션식 표 ── */
+/* 카드 메타 안의 유형 배지(§Task 10) — 표·보드와 같은 .nanalstamp-tv-type pill 재사용, 인라인 정렬만 보정 */
+.nanalstamp-task-meta .nanalstamp-tv-type { align-self: center; }
+.nanalstamp-tv-seg { display: flex; gap: 2px; padding: 8px 10px 0; border-bottom: 1px solid var(--background-modifier-border); }
+.nanalstamp-tv-seg-btn { background: none; border: none; box-shadow: none; color: var(--text-muted); font-size: 0.88em; padding: 5px 10px 7px; cursor: pointer; border-bottom: 2px solid transparent; border-radius: 0; }
+.nanalstamp-tv-seg-btn.is-on { color: var(--text-normal); border-bottom-color: var(--interactive-accent); font-weight: 600; }
+/* 상단 유형 카테고리 세그먼트(전체·받음·보냄·개인) — 뷰 무관 공통 필터. 뷰 세그먼트와 동일 밑줄 하이라이트,
+   모든 뷰·카드에서 노출. 좁은 사이드바(is-narrow)에선 조밀하게 줄바꿈 허용. */
+.nanalstamp-tv-catseg { display: flex; flex-wrap: wrap; gap: 2px; padding: 8px 10px 0; }
+.nanalstamp-tv-catseg-btn { background: none; border: none; box-shadow: none; color: var(--text-muted); font-size: 0.88em; padding: 4px 10px 6px; cursor: pointer; border-bottom: 2px solid transparent; border-radius: 0; }
+.nanalstamp-tv-catseg-btn.is-on { color: var(--text-normal); border-bottom-color: var(--interactive-accent); font-weight: 600; }
+.nanalstamp-tv-catseg.is-narrow { padding: 6px 8px 0; }
+.nanalstamp-tv-catseg.is-narrow .nanalstamp-tv-catseg-btn { font-size: 0.8em; padding: 3px 7px 5px; }
+/* 표 외곽선·격자 — --background-modifier-border는 AMOLED에서 배경과 거의 같아 안 보인다.
+   채색이 아니라 글씨색(--text-normal)을 배경에 살짝 섞은 회색으로 대비만 올려 시인성 확보(라이트/다크 공통). */
+.nanalstamp-tv-tablewrap { overflow-x: auto; border: 1px solid color-mix(in srgb, var(--text-normal) 14%, transparent); border-radius: 6px; }
+.nanalstamp-tv-table { width: 100%; min-width: 940px; border-collapse: collapse; table-layout: fixed; font-size: 0.85em; }
+.nanalstamp-tv-table th, .nanalstamp-tv-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid color-mix(in srgb, var(--text-normal) 13%, transparent); border-right: 1px solid color-mix(in srgb, var(--text-normal) 13%, transparent); vertical-align: top; overflow: hidden; text-overflow: ellipsis; }
+.nanalstamp-tv-table th { color: var(--text-muted); font-weight: 600; font-size: 0.95em; white-space: nowrap; background: var(--background-secondary); position: sticky; top: 0; z-index: 1; border-bottom: 2px solid color-mix(in srgb, var(--text-normal) 28%, transparent); }
+/* 세로 컬럼 구분선 — 가로선(border-bottom)과 동일한 회색 격자 톤. 마지막 컬럼은 오른쪽 선 없음(래퍼 외곽선과 이중선 방지). */
+.nanalstamp-tv-table th:last-child, .nanalstamp-tv-table td:last-child { border-right: none; }
+/* 다크(특히 AMOLED)는 배경이 흑에 가까워 같은 %도 흐리게 보인다 — 다크 한정으로 격자를 더 진하게(라이트는 위 기본값 유지). */
+.theme-dark .nanalstamp-tv-table th, .theme-dark .nanalstamp-tv-table td { border-bottom-color: color-mix(in srgb, var(--text-normal) 22%, transparent); border-right-color: color-mix(in srgb, var(--text-normal) 22%, transparent); }
+.theme-dark .nanalstamp-tv-table th { border-bottom-color: color-mix(in srgb, var(--text-normal) 40%, transparent); }
+.theme-dark .nanalstamp-tv-tablewrap { border-color: color-mix(in srgb, var(--text-normal) 22%, transparent); }
+.nanalstamp-tv-row.is-overdue td { background: color-mix(in srgb, var(--color-red) 6%, transparent); }
+.nanalstamp-tv-row.is-done { color: var(--text-muted); }
+.nanalstamp-tv-title.is-link { cursor: pointer; color: var(--text-accent); }
+.nanalstamp-tv-title.is-link:hover { text-decoration: underline; }
+.nanalstamp-tv-muted { color: var(--text-muted); }
+.nanalstamp-tv-memo { white-space: normal; }
+.nanalstamp-tv-type { border-radius: 4px; padding: 0 6px; font-size: 0.95em; font-weight: 600; line-height: 1.7; white-space: nowrap; }
+.nanalstamp-tv-type.is-received { background: color-mix(in srgb, var(--interactive-accent) 16%, transparent); color: var(--interactive-accent); }
+.nanalstamp-tv-type.is-sent { background: color-mix(in srgb, var(--color-yellow) 16%, transparent); color: var(--color-yellow); }
+.nanalstamp-tv-type.is-personal { background: color-mix(in srgb, var(--text-muted) 14%, transparent); color: var(--text-muted); }
+.nanalstamp-task-st.is-personal { background: color-mix(in srgb, var(--text-muted) 14%, transparent); color: var(--text-muted); }
+.nanalstamp-tv-td-act { white-space: normal; }
+.nanalstamp-tv-table .nanalstamp-task-act { flex: none; padding: 2px 7px; margin: 1px 3px 1px 0; font-size: 0.95em; }
+/* 표 행 hover·정렬 가능 헤더·완료 취소선(§Task 12) — 색은 전부 테마 변수 */
+.nanalstamp-tv-table tbody tr:hover td { background: var(--background-modifier-hover); }
+.nanalstamp-tv-row.is-done .nanalstamp-tv-title { text-decoration: line-through; }
+.nanalstamp-tv-td-title { max-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.nanalstamp-tv-table th.is-sortable:hover { color: var(--text-normal); }
+.nanalstamp-tv-th-label { white-space: nowrap; }
+.nanalstamp-tv-arrow { color: var(--interactive-accent); font-weight: 700; }
+/* 필터 아이콘 = lucide "filter"(깔때기) SVG. /team .th-filter와 동일 취지 — 정렬 화살표(↑↓)와 모양이
+   겹치지 않게 방향 화살표 대신 깔때기. 비활성은 은은(faint+opacity), th hover 시 또렷, 활성(.is-on)은 accent. */
+.nanalstamp-tv-filter { display: inline-flex; align-items: center; justify-content: center; vertical-align: middle;
+  margin-left: 5px; cursor: pointer; color: var(--text-faint); opacity: 0.55; user-select: none; border-radius: 3px; }
+.nanalstamp-tv-filter .svg-icon { width: 13px; height: 13px; }
+.nanalstamp-tv-table th:hover .nanalstamp-tv-filter { opacity: 1; }
+.nanalstamp-tv-filter:hover { color: var(--text-muted); background: var(--background-modifier-hover); opacity: 1; }
+.nanalstamp-tv-filter.is-on { color: var(--interactive-accent); opacity: 1; }
+/* 컬럼 드래그 리사이즈 핸들 — th 우측 경계(padding-right 위)에 얇은 그랩 영역. 색은 테마 변수. th overflow:hidden 안에
+   들어오도록 right:0(밖으로 넘기지 않음). 정렬 화살표·필터 깔때기는 padding 안쪽이라 핸들과 겹치지 않는다. */
+.nanalstamp-col-resize-handle { position: absolute; top: 0; right: 0; width: 8px; height: 100%; cursor: col-resize; z-index: 2; user-select: none; touch-action: none; }
+.nanalstamp-col-resize-handle::after { content: ""; position: absolute; top: 20%; right: 2px; width: 2px; height: 60%; border-radius: 1px; background: transparent; }
+.nanalstamp-col-resize-handle:hover::after, .nanalstamp-col-resize-handle.is-dragging::after { background: var(--interactive-accent); }
+/* 드래그 중 전역 커서·선택 억제(어느 요소 위든 col-resize 유지). */
+body.nanalstamp-col-resizing, body.nanalstamp-col-resizing * { cursor: col-resize !important; user-select: none !important; }
+
+/* ── 업무함 4뷰 시각 마감(§Task 12) — 툴바·그룹·컴팩트·보드·카드·팝오버. 색은 전부 Obsidian 테마 변수 ── */
+/* 툴바(완료 숨김 토글 + 정렬/필터 요약 칩) */
+.nanalstamp-tv-region { display: block; }
+.nanalstamp-tv-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 7px 10px; font-size: 0.82em; border-bottom: 1px solid var(--background-modifier-border); }
+.nanalstamp-tv-hidedone { background: var(--background-primary); border: 1px solid var(--background-modifier-border); color: var(--text-muted); border-radius: 5px; padding: 3px 10px; font-size: 1em; cursor: pointer; box-shadow: none; }
+.nanalstamp-tv-hidedone:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
+.nanalstamp-tv-hidedone.is-on { border-color: var(--interactive-accent); color: var(--interactive-accent); background: color-mix(in srgb, var(--interactive-accent) 10%, transparent); }
+.nanalstamp-tv-chip { display: inline-flex; align-items: center; border-radius: 4px; padding: 1px 8px; background: color-mix(in srgb, var(--text-muted) 12%, transparent); color: var(--text-muted); font-weight: 600; }
+.nanalstamp-tv-chip.is-filter { background: color-mix(in srgb, var(--interactive-accent) 14%, transparent); color: var(--interactive-accent); }
+.nanalstamp-tv-chip-clear { background: none; border: none; box-shadow: none; color: var(--text-faint); cursor: pointer; padding: 1px 4px; font-size: 1em; text-decoration: underline; }
+.nanalstamp-tv-chip-clear:hover { color: var(--text-normal); }
+
+/* 그룹 뷰 — 기준 선택 바 + 접기 헤더(색 점·라벨·건수) + 소표 본문 */
+.nanalstamp-tv-groupbar { display: flex; align-items: center; gap: 8px; padding: 8px 10px; font-size: 0.85em; color: var(--text-muted); }
+.nanalstamp-tv-groupsel { font-size: 0.95em; padding: 2px 6px; border-radius: 5px; border: 1px solid var(--background-modifier-border); background: var(--background-primary); color: var(--text-normal); }
+.nanalstamp-tv-groups { display: flex; flex-direction: column; gap: 4px; padding: 0 4px 6px; }
+.nanalstamp-tv-group { border-radius: 6px; }
+.nanalstamp-tv-group-head { display: flex; align-items: center; gap: 7px; padding: 6px 8px; cursor: pointer; border-radius: 5px; font-size: 0.88em; user-select: none; }
+.nanalstamp-tv-group-head:hover { background: var(--background-modifier-hover); }
+.nanalstamp-tv-group-caret { color: var(--text-faint); width: 0.9em; flex: none; font-size: 0.9em; }
+.nanalstamp-tv-group-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--text-muted); }
+.nanalstamp-tv-group-label { font-weight: 600; color: var(--text-normal); }
+.nanalstamp-tv-group-count { color: var(--text-muted); background: color-mix(in srgb, var(--text-muted) 12%, transparent); border-radius: 9px; padding: 0 7px; font-size: 0.9em; font-weight: 600; }
+.nanalstamp-tv-group-body { margin: 2px 0 4px; }
+.nanalstamp-tv-group-head.is-collapsed { color: var(--text-muted); }
+
+/* 컴팩트 뷰 — 제목·유형·마감·상태 한 줄 조밀 */
+.nanalstamp-tv-compact { display: flex; flex-direction: column; }
+.nanalstamp-tv-compact-row { display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-bottom: 1px solid var(--background-modifier-border); font-size: 0.85em; }
+.nanalstamp-tv-compact-row:hover { background: var(--background-modifier-hover); }
+.nanalstamp-tv-compact-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-normal); }
+.nanalstamp-tv-compact-title.is-link { cursor: pointer; color: var(--text-accent); }
+.nanalstamp-tv-compact-title.is-link:hover { text-decoration: underline; }
+.nanalstamp-tv-compact-row.is-overdue { box-shadow: inset 2px 0 0 var(--color-red); }
+.nanalstamp-tv-compact-row.is-overdue .nanalstamp-tv-compact-title { color: var(--color-red); }
+.nanalstamp-tv-compact-row.is-done { color: var(--text-muted); }
+.nanalstamp-tv-compact-row.is-done .nanalstamp-tv-compact-title { text-decoration: line-through; color: var(--text-muted); }
+
+/* 보드(칸반) 뷰 — 상태 컬럼 가로 배치 + 세로 카드 스택 + 드래그 하이라이트 */
+.nanalstamp-tv-board { display: flex; align-items: flex-start; gap: 10px; overflow-x: auto; padding: 10px; }
+.nanalstamp-tv-board.is-drag-active .nanalstamp-tv-board-col { border-style: dashed; }
+.nanalstamp-tv-board-col { flex: 0 0 auto; width: 240px; background: var(--background-secondary); border: 1px solid var(--background-modifier-border); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; }
+.nanalstamp-tv-board-col.is-drop-ok { border-color: var(--interactive-accent); }
+.nanalstamp-tv-board-head { display: flex; align-items: center; gap: 6px; padding: 2px 4px 8px; font-size: 0.85em; }
+.nanalstamp-tv-board-name { font-weight: 600; color: var(--text-normal); flex: 1; }
+.nanalstamp-tv-board-count { color: var(--text-muted); background: color-mix(in srgb, var(--text-muted) 12%, transparent); border-radius: 9px; padding: 0 7px; font-weight: 600; }
+.nanalstamp-tv-board-list { display: flex; flex-direction: column; gap: 7px; min-height: 24px; }
+.nanalstamp-tv-board-empty { color: var(--text-faint); font-size: 0.82em; text-align: center; padding: 12px 0; margin: 0; }
+
+/* 카드(보드 셀) */
+.nanalstamp-tv-card { background: var(--background-primary); border: 1px solid var(--background-modifier-border); border-radius: 7px; padding: 8px 9px; display: flex; flex-direction: column; gap: 6px; cursor: grab; }
+.nanalstamp-tv-card:hover { border-color: var(--interactive-accent); box-shadow: 0 0 0 1px var(--interactive-accent); }
+.nanalstamp-tv-card.is-overdue { border-color: color-mix(in srgb, var(--color-red) 55%, transparent); box-shadow: inset 2px 0 0 var(--color-red); }
+.nanalstamp-tv-card.is-done { opacity: 0.72; }
+.nanalstamp-tv-card.is-dragging { opacity: 0.5; cursor: grabbing; }
+.nanalstamp-tv-card-title { display: flex; align-items: center; gap: 6px; }
+.nanalstamp-tv-card-pdot { flex: none; font-size: 0.72em; }
+.nanalstamp-tv-card-name { flex: 1; min-width: 0; font-weight: 600; font-size: 0.86em; color: var(--text-normal); word-break: break-word; }
+.nanalstamp-tv-card.is-done .nanalstamp-tv-card-name { text-decoration: line-through; color: var(--text-muted); }
+.nanalstamp-tv-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; font-size: 0.78em; color: var(--text-muted); }
+.nanalstamp-tv-card-due { font-size: 0.8em; }
+.nanalstamp-tv-card-act { display: flex; flex-wrap: wrap; gap: 4px; }
+.nanalstamp-tv-card-act .nanalstamp-task-act { flex: none; padding: 2px 8px; font-size: 0.8em; }
+.nanalstamp-tv-tag { display: inline-block; border-radius: 4px; padding: 0 6px; background: var(--background-secondary); border: 1px solid var(--background-modifier-border); color: var(--text-muted); font-size: 0.95em; }
+
+/* 필터 팝오버 — 최소 컨테이너 인라인(위치·테두리)은 taskview.ts, 내용 스타일만 여기 */
+.nanalstamp-tv-pop-opt { display: flex; align-items: center; gap: 7px; padding: 3px 4px; border-radius: 4px; cursor: pointer; font-size: 0.85em; }
+.nanalstamp-tv-pop-opt:hover { background: var(--background-modifier-hover); }
+.nanalstamp-tv-pop-date { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.82em; }
+.nanalstamp-tv-pop input[type="text"], .nanalstamp-tv-pop input[type="date"] { width: 100%; font-size: 0.85em; }
+.nanalstamp-tv-pop-date input[type="date"] { width: auto; flex: 1; }
+.nanalstamp-tv-pop-clear { background: none; border: none; box-shadow: none; color: var(--text-faint); cursor: pointer; text-align: left; padding: 3px 4px; font-size: 0.82em; text-decoration: underline; }
+.nanalstamp-tv-pop-clear:hover { color: var(--text-normal); }
+
+/* ── 업무 등록 폼 — 수신자 다중 선택(체크박스 목록, fan-out) ── */
+.nanalstamp-task-assignee-list { display: flex; flex-direction: column; gap: 3px; max-height: 200px; overflow-y: auto; margin: 2px 0 14px; padding: 6px 8px; border: 1px solid var(--background-modifier-border); border-radius: 5px; }
+.nanalstamp-task-assignee-row { display: flex; align-items: center; gap: 6px; font-size: 0.88em; cursor: pointer; padding: 2px 0; }
+
+/* ── 폴더 만들기 모달 ─────────────────────────────────────────────────────
+   행 전체가 <label>이라 어디를 눌러도 체크박스가 토글된다(접근성: 체크박스에 이름이 붙는다).
+   인라인 스타일을 여기로 모은 것 — 2026-07-25. */
+.nanalstamp-fc-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--background-modifier-border); cursor: pointer; }
+.nanalstamp-fc-row:has(input:disabled) { cursor: default; }
+.nanalstamp-fc-label { flex: 1; min-width: 0; }
+.nanalstamp-fc-sub { font-size: 0.8em; color: var(--text-muted); }
+.nanalstamp-fc-badge { font-size: 0.85em; color: var(--text-normal); }
+.nanalstamp-fc-badge.is-muted { color: var(--text-muted); }
+.nanalstamp-fc-badge.is-error { color: var(--text-error); }
+
+/* ── 리본 메뉴(nanalstamp-ribbon-menu 한정) ──────────────────────────────────
+   카테고리 제목은 선택 대상이 아닌 라벨(setIsLabel)이다. 색은 **강조색**을 쓴다 — 회색은
+   진하게 하면 항목과 구분이 사라지고 흐리게 하면 안 읽히는 딜레마가 있었다.
+   ※ macOS 기본은 네이티브 메뉴라 이 CSS가 닿지 않는다 — buildRibbonMenu가 setUseNativeMenu(false)로
+     이 메뉴만 DOM 렌더로 돌린다(전역 설정은 그대로). */
+.menu-item .nanalstamp-menu-header { display: inline-block; color: var(--text-accent); font-size: 0.85em; font-weight: 700; letter-spacing: 0.1em; }
+.menu-item:has(.nanalstamp-menu-header) { opacity: 1; pointer-events: none; cursor: default; min-height: 0; }
+.menu-item:has(.nanalstamp-menu-header) .menu-item-icon { display: none; }
+/* "처리해야 할 일" 항목(원문 누락·빠진 봉인 발견·반려·봉인 보류) — 건수만 붙여서는 평상시
+   항목과 구분이 안 돼 지나친다(2026-08-06 지적). 제목·아이콘을 경고색으로. */
+.menu-item .nanalstamp-menu-warn { color: var(--color-red); font-weight: 600; }
+.menu-item:has(.nanalstamp-menu-warn) .menu-item-icon { color: var(--color-red); }
+
+/* 팀 폴더 충돌 처리 팝업(2026-08-06) — 충돌 경로 / 새 이름 입력 / 바꾸기 버튼 한 줄 */
+.nanalstamp-fcf-row { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+.nanalstamp-fcf-path { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.nanalstamp-fcf-row input { flex: 1 1 160px; min-width: 120px; }
+.nanalstamp-fcf-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; }
+
+/* 간격 — 항목 21행이라 기본 여백으로는 메뉴가 화면을 넘본다. 촘촘하게 좁히되 카테고리 위에만
+   숨 쉴 틈을 남겨 그룹이 뭉치지 않게 한다. */
+.menu.nanalstamp-ribbon-menu .menu-item { padding-top: 2px; padding-bottom: 2px; min-height: 0; }
+.menu.nanalstamp-ribbon-menu .menu-item:has(.nanalstamp-menu-header) { padding-top: 9px; padding-bottom: 1px; }
+/* hover 하이라이트 — 테마 기본이 투명도 7.5%라 어디에 있는지 안 보였다(사용자 지적).
+   선택 위치는 메뉴에서 가장 중요한 신호이므로 확실히 보이게 올린다. */
+.menu.nanalstamp-ribbon-menu .menu-item.selected,
+.menu.nanalstamp-ribbon-menu .menu-item:hover:not(:has(.nanalstamp-menu-header)) { background: color-mix(in srgb, var(--text-normal) 18%, transparent); }
+
+/* ── 업무 상세 모달(2026-07-26) — 표에 담을 수 없는 설명·이력·완료 보고·회신을 한곳에서 ── */
+.nanalstamp-tv-substamp { margin-top: 1px; font-size: 0.85em; color: var(--text-muted); }
+.nanalstamp-task-detail .nanalstamp-td-title { font-size: 1.05em; font-weight: 700; margin: 2px 0 8px; word-break: break-word; }
+.nanalstamp-task-detail .nanalstamp-td-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.nanalstamp-task-detail h4 { margin: 14px 0 5px; font-size: 0.86em; font-weight: 700; letter-spacing: 0.08em; color: var(--text-accent); }
+.nanalstamp-task-detail .nanalstamp-td-row { display: flex; gap: 8px; padding: 2px 0; font-size: 0.9em; }
+.nanalstamp-task-detail .nanalstamp-td-label { flex: none; width: 72px; color: var(--text-muted); }
+.nanalstamp-task-detail .nanalstamp-td-value { flex: 1; min-width: 0; word-break: break-word; }
+/* 본문·완료 보고·비고 — 줄바꿈을 그대로 보존한다(사용자가 적은 그대로가 증적이다). */
+.nanalstamp-task-detail .nanalstamp-td-body { white-space: pre-wrap; word-break: break-word; font-size: 0.92em; padding: 8px 10px; border-radius: 6px; background: var(--background-secondary); }
+.nanalstamp-task-detail .nanalstamp-td-body.is-empty { color: var(--text-muted); font-style: italic; background: transparent; padding: 2px 0; }
+/* 회신 목록 — 스크롤바가 생기면 본문 박스가 그것과 맞닿아 답답하다. 오른쪽을 비워 둔다. */
+.nanalstamp-task-detail .nanalstamp-td-replies {
+  display: flex; flex-direction: column; gap: 8px;
+  /* 자체 스크롤을 두지 않는다(2026-08-06 지적) — 바깥 본문(.nanalstamp-td-scroll)이
+     스크롤을 맡으므로 여기에 max-height 를 주면 **스크롤바가 둘**이 된다. 회신이 길면
+     본문 스크롤이 자연스럽게 늘어나는 쪽이 읽기 쉽다. */
+}
+/* 회신 — 디렉터리 트리처럼 읽히게(2026-07-29). "누가" 아래로 선이 내려와 ㄴ자로 꺾이고,
+   그 끝에 "무엇을"이 박스로 담긴다. 선만으로는 어디까지가 한 사람의 말인지 안 보인다. */
+.nanalstamp-task-detail .nanalstamp-td-reply { margin-top: 14px; }
+.nanalstamp-task-detail .nanalstamp-td-reply-head {
+  display: flex; gap: 8px; align-items: baseline;
+  font-size: 0.84em; color: var(--text-muted);
+}
+.nanalstamp-task-detail .nanalstamp-td-reply-who { font-weight: 700; color: var(--text-normal); font-size: 1.06em; }
+.nanalstamp-task-detail .nanalstamp-td-reply-body {
+  position: relative;
+  white-space: pre-wrap; word-break: break-word;
+  font-size: 0.92em; line-height: 1.6;
+  margin: 6px 0 0 22px;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.20);
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
+}
+/* ㄴ자 연결선 — 작성자 줄에서 내려와 박스 왼쪽으로 꺾인다. */
+.nanalstamp-task-detail .nanalstamp-td-reply-body::before {
+  content: "";
+  position: absolute;
+  left: -13px; top: -7px;
+  width: 12px; height: 21px;
+  border-left: 2px solid var(--background-modifier-border-hover);
+  border-bottom: 2px solid var(--background-modifier-border-hover);
+  border-bottom-left-radius: 5px;
+}
+.theme-light .nanalstamp-task-detail .nanalstamp-td-reply-body { border-color: rgba(0, 0, 0, 0.18); }/* 회신 작성(2026-07-26) — 목록 아래, 버튼 위. 입력은 폭을 꽉 채우고 버튼만 오른쪽에 둔다. */
+.nanalstamp-task-detail .nanalstamp-td-reply-form { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.nanalstamp-task-detail .nanalstamp-td-reply-input { width: 100%; resize: vertical; min-height: 2.6em; font-size: 0.92em; }
+.nanalstamp-task-detail .nanalstamp-td-reply-form button {
+  align-self: flex-end; padding: 6px 18px; min-width: 76px; margin-top: 2px;
+}
+.nanalstamp-task-detail .nanalstamp-td-reply-notice { margin-top: 10px; }
+
+/* 팀 폴더 이름 변경 제안(2026-07-26) — 무엇이 어디로 가는지 한눈에. */
+.nanalstamp-folder-rename .nanalstamp-fr-list { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
+.nanalstamp-folder-rename .nanalstamp-fr-row { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; font-size: 0.92em; }
+.nanalstamp-folder-rename .nanalstamp-fr-from { color: var(--text-muted); text-decoration: line-through; word-break: break-all; }
+.nanalstamp-folder-rename .nanalstamp-fr-arrow { color: var(--text-faint); }
+.nanalstamp-folder-rename .nanalstamp-fr-to { font-weight: 600; word-break: break-all; }
+.nanalstamp-folder-rename .nanalstamp-fr-count { color: var(--text-faint); font-size: 0.86em; margin-left: auto; white-space: nowrap; }
+
+/* 업무함 검색 — 헤더 아래 한 줄. 이미 전건을 받아 두었으므로 즉시 필터한다(2026-07-26). */
+.nanalstamp-tv-search { padding: 4px 8px 6px; }
+.nanalstamp-tv-search-input {
+  width: 100%; font-size: 12.5px; padding: 4px 8px;
+  border: 1px solid var(--background-modifier-border); border-radius: 5px;
+  background: var(--background-primary); color: var(--text-normal);
+}
+
+/* 회신 멘션 후보 — @ 입력 시 텍스트영역 아래로 뜬다(2026-07-26). */
+.nanalstamp-td-mention {
+  border: 1px solid var(--background-modifier-border); border-radius: 6px;
+  background: var(--background-primary); margin-top: 4px; overflow: hidden;
+}
+.nanalstamp-td-mention-row { padding: 5px 9px; font-size: 12.5px; cursor: pointer; }
+.nanalstamp-td-mention-row:hover { background: var(--background-modifier-hover); }
+
+/* 폴더 트리 선택기(2026-07-27) — 평면 목록은 위계가 안 보여 어느 폴더가 어디 속하는지 알 수 없다.
+   vault 구조 그대로 펼쳐 보여주고 체크박스로 여러 개를 한 번에 고른다. */
+.ns-ft-help { color: var(--text-muted); font-size: 12px; margin: 2px 0 10px; }
+.ns-ft-search { width: 100%; margin-bottom: 8px; }
+.ns-ft-tree {
+  max-height: 44vh; overflow: auto; border: 1px solid var(--background-modifier-border);
+  border-radius: 6px; padding: 6px 4px; background: var(--background-primary);
+}
+.ns-ft-row {
+  display: flex; align-items: center; gap: 6px; padding: 3px 6px;
+  border-radius: 4px; cursor: pointer; font-size: 13px;
+}
+.ns-ft-row:hover { background: var(--background-modifier-hover); }
+/* 삼각형 자리는 항상 차지한다 — 없을 때 접히면 같은 깊이의 행이 어긋나 위계가 흐려진다.
+   크기는 눌러야 할 것으로 보일 만큼 준다(2026-07-27: 너무 작다는 지적). */
+/* ▸ 글리프는 폰트마다 실제 잉크가 작게 그려져 font-size를 키워도 커 보이지 않는다.
+   테두리로 삼각형을 직접 그려 크기를 확실히 잡는다(2026-07-27: 두 번 지적). */
+.ns-ft-tri {
+  width: 24px; height: 24px; flex: none; border-radius: 5px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0;                       /* 텍스트 글리프는 숨기고 ::after로 그린다 */
+}
+.ns-ft-tri.is-clickable { cursor: pointer; }
+.ns-ft-tri.is-clickable::after {
+  content: ""; display: block;
+  border-style: solid; border-color: transparent;
+  border-width: 6px 0 6px 9px;        /* 오른쪽을 가리키는 삼각형 */
+  border-left-color: var(--text-muted);
+  transition: transform .12s ease, border-left-color .12s ease;
+}
+.ns-ft-row.is-open > .ns-ft-tri.is-clickable::after { transform: rotate(90deg); }
+.ns-ft-tri.is-clickable:hover { background: var(--background-modifier-border); }
+.ns-ft-tri.is-clickable:hover::after { border-left-color: var(--text-normal); }
+/* 상위가 덮고 있어 개별 해제가 안 되는 행은 그 사실이 보여야 한다 — 안 눌리는데 눌릴 것처럼
+   보이면 고장으로 읽힌다. */
+.ns-ft-row input[type="checkbox"]:disabled { opacity: .55; cursor: not-allowed; }
+/* 하위 일부만 선택된 중간 상태 — 브라우저 기본 표시가 테마에 따라 잘 안 보인다.
+   체크(✓)와 확실히 구분되도록 가운데 막대를 직접 그린다. */
+.ns-ft-row input[type="checkbox"]:indeterminate {
+  opacity: 1; position: relative;
+  background: var(--background-modifier-border); border-color: var(--text-muted);
+}
+.ns-ft-row input[type="checkbox"]:indeterminate::after {
+  content: ""; position: absolute; left: 22%; right: 22%; top: 50%;
+  height: 2px; margin-top: -1px; border-radius: 1px; background: var(--text-normal);
+}
+.ns-ft-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ns-ft-tag {
+  flex: none; font-size: 10.5px; color: var(--text-muted);
+  background: var(--background-modifier-border); border-radius: 8px; padding: 1px 7px;
+}
+.ns-ft-empty { color: var(--text-muted); font-size: 12.5px; padding: 12px 6px; text-align: center; }
+.ns-ft-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; }
+.ns-ft-count { color: var(--text-muted); font-size: 12.5px; }
+.ns-ft-btns { display: flex; gap: 8px; }
+
+/* 시작 범위 모달 — 아카이브 경로 표시 + FREE 구독 안내 박스.
+   경고 박스를 따로 두는 이유: 이 문단은 "설정 설명"이 아니라 **기기가 죽으면 지난 버전도 죽는다**는
+   고지다. 회색 설명글로 흘려보내면 읽히지 않는다(2026-07-29). */
+.nanalstamp-onboard-path {
+  margin-top: 4px;
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  word-break: break-all;
+}
+.nanalstamp-onboard-upsell {
+  margin: 10px 0 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--background-modifier-border);
+  border-left: 3px solid var(--text-accent);
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
+}
+.nanalstamp-onboard-upsell p {
+  margin: 0 0 8px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.nanalstamp-onboard-upsell-warn {
+  color: var(--text-error) !important;
+  font-weight: 600;
+}
+.nanalstamp-onboard-upsell button {
+  margin-top: 2px;
+}
+
+/* ── 모달: 뒤가 비치지 않게 · 바깥 클릭으로 닫히지 않게 (2026-07-29) ──────────────
+   Obsidian 기본 배경은 opacity 0.85 × alpha 0.4 = 실효 0.34라 아래 표의 글자가 그대로
+   읽힌다. 어디까지가 창인지 눈으로 구분되지 않아 헷갈린다는 지적. 덮개를 진하게 하고
+   창에 테두리·그림자를 줘 경계를 세운다. 바깥 클릭 차단은 modalbase.ts. */
+/* 구분은 **덮개를 어둡게 하는 것**이 아니라 **창을 띄우는 것**으로 만든다.
+   블러를 걸고 배경을 짙게 덮으면 다른 플러그인과 이질적이고 답답하다(2026-07-29 되돌림).
+   덮개는 기본보다 한 단만 진하게(실효 0.34 → 0.5), 대신 테두리를 또렷하게 하고
+   그림자를 크게 줘 창이 공중에 뜬 것처럼 보이게 한다.
+   Obsidian이 modal-bg의 opacity를 인라인(0.85)으로 박으므로 !important 아니면 못 이긴다. */
+.nanalstamp-modal-container .modal-bg {
+  background-color: rgba(8, 8, 10, 0.5);
+  opacity: 1 !important;   /* 어둡기는 위 alpha 하나로만 정한다 */
+}
+/* 경계는 **테두리 하나로만** 만든다. 그림자는 어두운 배경에서 보이지도 않으면서
+   가장자리를 뭉개기만 했다 — 뺀다(2026-07-29). 테마가 .modal에 자체 border나 shadow를
+   주는 경우가 있어 둘 다 !important로 못박는다. */
+.nanalstamp-modal-container .modal {
+  border: 1px solid rgba(255, 255, 255, 0.52) !important;
+  box-shadow: none !important;
+}
+.theme-light .nanalstamp-modal-container .modal-bg { background-color: rgba(30, 30, 36, 0.36); }
+.theme-light .nanalstamp-modal-container .modal {
+  border: 1px solid rgba(0, 0, 0, 0.45) !important;
+}
+
+/* ── 모달 안쪽 조판 (2026-07-29) ─────────────────────────────────────────────
+   Obsidian의 Setting은 "좌: 이름·설명 / 우: 컨트롤" 2단이다. 토글·짧은 버튼에는 맞지만
+   **긴 입력에는 맞지 않는다** — 완료 보고를 적는 textarea가 우측 좁은 칸에 갇혀 두 줄짜리
+   상자가 되고, 상태 문구("선택 안 함")는 글자 단위로 줄바꿈된다. 팔 제품의 화면이 아니다.
+   입력이 든 항목만 세로 스택으로 풀어 전폭을 주고, 제목·설명의 위계를 세운다. */
+
+/* 제목: 본문보다 확실히 크고 굵게. h2/h3가 섞여 있어 둘 다 같은 급으로 맞춘다. */
+.nanalstamp-modal-container .modal h2,
+.nanalstamp-modal-container .modal h3 {
+  margin: 0 0 6px;
+  font-size: 1.34em;
+  font-weight: 700;
+  letter-spacing: -0.012em;
+  line-height: 1.3;
+}
+/* 제목 바로 아래 대상 이름 — 설명(흐린 회색)과 같은 톤이면 무엇이 대상인지 안 보인다. */
+.nanalstamp-modal-container .nanalstamp-m-subject {
+  margin: 0 0 12px;
+  font-size: 1.02em;
+  font-weight: 600;
+  color: var(--text-normal);
+}
+/* 안내문 — 상자에 넣었더니 이 문단만 padding 만큼 안쪽에서 시작해 제목·라벨과 왼쪽 선이
+   어긋났다(2026-07-29 지적). 다크 테마에선 테두리도 배경에 묻혀 상자 구실을 못 했다.
+   상자를 걷고 **왼쪽 선을 모두와 맞춘다** — 구분은 색과 크기로 충분하다. */
+.nanalstamp-modal-container .nanalstamp-m-note {
+  margin: 0 0 14px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.55;
+}
+
+/* 입력이 든 항목은 2단을 풀고 세로로 — 라벨·설명 위, 입력은 전폭 아래. */
+.nanalstamp-modal-container .setting-item:has(textarea),
+.nanalstamp-modal-container .setting-item.nanalstamp-m-stack {
+  display: block;
+  padding: 12px 0;
+}
+.nanalstamp-modal-container .setting-item:has(textarea) .setting-item-info,
+.nanalstamp-modal-container .setting-item.nanalstamp-m-stack .setting-item-info { margin-right: 0; }
+.nanalstamp-modal-container .setting-item:has(textarea) .setting-item-control,
+.nanalstamp-modal-container .setting-item.nanalstamp-m-stack .setting-item-control {
+  width: 100%;
+  justify-content: flex-start;
+  margin-top: 8px;
+}
+.nanalstamp-modal-container .setting-item textarea {
+  width: 100%;
+  min-height: 108px;   /* 완료 보고는 감사 리포트에 남는 기록이다 — 두 줄로는 못 쓴다 */
+  resize: vertical;
+  line-height: 1.6;
+}
+/* 짧은 입력(날짜 등)은 2단을 유지하되 너무 좁아지지 않게 */
+.nanalstamp-modal-container .setting-item-control input[type="text"],
+.nanalstamp-modal-container .setting-item-control input[type="email"] { min-width: 210px; }
+
+/* 라벨은 굵게, 설명은 한 톤 낮춰 — 지금은 둘이 같은 회색이라 구분이 안 된다. */
+.nanalstamp-modal-container .setting-item-name { font-weight: 600; }
+.nanalstamp-modal-container .setting-item-description { line-height: 1.55; }
+
+/* 컨트롤 줄의 상태 문구가 글자 단위로 쪼개지지 않게 */
+.nanalstamp-modal-container .setting-item-control { flex-wrap: nowrap; }
+.nanalstamp-modal-container .setting-item-control > span { white-space: nowrap; }
+
+/* 마지막 버튼 줄 — 구분선으로 "여기가 끝"임을 보이고 오른쪽으로 몬다 */
+.nanalstamp-modal-container .setting-item.nanalstamp-m-actions {
+  border-top: 1px solid var(--background-modifier-border);
+  margin-top: 6px;
+  padding-top: 14px;
+  justify-content: flex-end;
+}
+.nanalstamp-modal-container .setting-item.nanalstamp-m-actions .setting-item-info { display: none; }
+
+/* 완료 모달 — 결과 노트 선택 줄. 고른 경로가 길어도 글자 단위로 쪼개지지 않게. */
+.nanalstamp-td-pickrow {
+  display: flex; align-items: center; gap: 8px;
+  min-width: 0; flex: 1 1 auto;   /* 버튼 바로 옆에 붙되, 긴 경로는 여기서 줄어든다 */
+}
+.nanalstamp-td-result {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: var(--font-ui-small);
+  direction: rtl; text-align: left;  /* 경로가 길면 앞이 잘리고 **파일명이 남는다** */
+}
+.nanalstamp-td-result.is-empty { color: var(--text-faint); font-style: italic; direction: ltr; }
+.nanalstamp-td-clear { flex: none; font-size: var(--font-ui-smaller); }
+
+/* 입력창 테두리 — 모달 테두리와 같은 문제다. Obsidian 기본 --background-modifier-border는
+   어두운 테마에서 배경에 묻혀 "어디가 입력칸인지" 보이지 않는다(2026-07-29 지적).
+   테마가 자체 border를 주는 경우가 있어 !important. 포커스는 강조색으로 한 번 더 구분한다. */
+.nanalstamp-modal-container textarea,
+.nanalstamp-modal-container input[type="text"],
+.nanalstamp-modal-container input[type="email"],
+.nanalstamp-modal-container input[type="password"],
+.nanalstamp-modal-container input[type="number"],
+.nanalstamp-modal-container input[type="search"],
+.nanalstamp-modal-container select {
+  border: 1px solid rgba(255, 255, 255, 0.30) !important;
+}
+.nanalstamp-modal-container textarea:focus,
+.nanalstamp-modal-container input:focus,
+.nanalstamp-modal-container select:focus {
+  border-color: var(--interactive-accent) !important;
+  box-shadow: 0 0 0 2px var(--background-modifier-border-focus) !important;
+}
+.theme-light .nanalstamp-modal-container textarea,
+.theme-light .nanalstamp-modal-container input[type="text"],
+.theme-light .nanalstamp-modal-container input[type="email"],
+.theme-light .nanalstamp-modal-container input[type="password"],
+.theme-light .nanalstamp-modal-container input[type="number"],
+.theme-light .nanalstamp-modal-container input[type="search"],
+.theme-light .nanalstamp-modal-container select {
+  border: 1px solid rgba(0, 0, 0, 0.28) !important;
+}
+
+/* 업무 상세 — [업무 수정]은 상태 배지 줄 오른쪽 끝에. 하단 회신 입력창 아래에 두었더니
+   "회신을 수정"하는 것으로 읽혔다(2026-07-29). 이 버튼은 업무 전체에 대한 것이다. */
+.nanalstamp-task-detail .nanalstamp-td-pills { display: flex; align-items: center; gap: 6px; }
+.nanalstamp-task-detail .nanalstamp-td-edit {
+  margin-left: auto;
+  font-size: var(--font-ui-smaller);
+  padding: 4px 12px;
+}
+
+/* 제출 패키지 — 무엇이 들어가고 무엇이 빠지는지가 이 화면의 전부다.
+   빠지는 것을 흐린 회색으로 두면 사용자가 못 보고 넘어간다. */
+.nanalstamp-pkg-preview {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
+  padding: 12px 14px;
+  margin: 14px 0 4px;
+}
+.nanalstamp-pkg-warn {
+  color: var(--text-warning);
+  margin-top: 8px;
+}
+.nanalstamp-pkg-files {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+.nanalstamp-pkg-files li { word-break: break-all; }
+
+/* 점검 반려 사유 — 점검자가 쓴 글이라 줄바꿈을 살린다. */
+.nanalstamp-review-comment {
+  margin-top: 6px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: var(--font-ui-small);
+  color: var(--text-normal);
+}
+
+/* 증명 화면의 노트 단위 작업 — 리본에서 옮겨 온 것(2026-07-30). 이력 위에 한 줄로 둔다. */
+.nanalstamp-proof-actions {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin: 12px 0 4px; padding-bottom: 12px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+/* 확인 모달 버튼 행 — 취소를 왼쪽에 두고 실행을 오른쪽에(플랫폼 관례). */
+.nanalstamp-confirm-btns {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+/* 제출 패키지 — 무엇을 담을지 고르는 목록 */
+.nanalstamp-pkg-choices { margin-top: 12px; border-top: 1px solid var(--background-modifier-border); padding-top: 10px; }
+.nanalstamp-pkg-choice { display: flex; align-items: center; gap: 8px; padding: 2px 0; font-size: var(--font-ui-small); }
+.nanalstamp-pkg-choice input { margin: 0; }
+
+/* 업무 상세 모달 — 헤더 / 스크롤 본문 / 고정 푸터(2026-08-06 지적).
+   종전에는 contentEl 에 전부 평평하게 쌓아 **모달 전체가 스크롤**됐다. 회신이 쌓이면
+   닫기(X)가 위로 밀려 사라지고, 스크롤바가 둥근 모서리 밖으로 삐져나왔다.
+   Obsidian 의 .modal-close-button 은 .modal 기준 절대배치라, 스크롤을 안쪽 본문으로
+   옮기면 X 는 제자리에 남고 스크롤바도 본문 안쪽에 생긴다.
+   ProofModal(.nanalstamp-proof-content)이 이미 같은 방식이다 — 그쪽과 같은 골격을 쓴다. */
+.modal-content.nanalstamp-task-detail {
+  display: flex;
+  flex-direction: column;
+  max-height: 80vh;
+  overflow: hidden;              /* 스크롤은 .nanalstamp-td-scroll 만 */
+}
+.nanalstamp-td-head { flex: none; padding-right: 34px; }   /* X 버튼과 겹치지 않게 */
+.nanalstamp-td-head h3 { margin-top: 0; }
+.nanalstamp-td-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+/* 회신 입력은 푸터로 고정 — 회신이 많아도 스크롤하지 않고 바로 쓸 수 있다. */
+.nanalstamp-td-reply-form,
+.nanalstamp-td-reply-notice {
+  flex: none;
+  border-top: 1px solid var(--background-modifier-border);
+  padding-top: 10px;
+  margin-top: 10px;
+}
+
+/* 브랜드 씰 아이콘 — insertAdjacentHTML 제거(스토어 가이드) 후 createEl+클래스로 */
+.nanalstamp-ribbon-icon { display: block; }
+.nanalstamp-status-seal { display: inline-block; vertical-align: middle; }

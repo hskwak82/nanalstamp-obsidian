@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
   cdcChunks, buildManifest, parseManifest,
-  CHUNK_MIN, CHUNK_MAX, CHUNK_THRESHOLD,
+  CHUNK_MIN, CHUNK_MAX, CHUNK_THRESHOLD, nextCut,
 } from "./chunkcore";
 
 /** 결정적 의사난수 데이터(xorshift32) — 테스트 재현성 보장. */
@@ -134,4 +134,48 @@ test("상수: 임계값·경계 관계", () => {
   assert.equal(CHUNK_THRESHOLD, 512 * 1024);
   assert.ok(CHUNK_MIN >= 128 * 1024); // Glacier 전환 임계(128KB) 상회
   assert.ok(CHUNK_MIN < CHUNK_MAX);
+});
+
+// ── 스트리밍 경계 일치 ──────────────────────────────────────────────
+// 대형 첨부는 파일을 조금씩 읽으며 조각을 만든다. 그 경계가 전체 버퍼 방식과 **바이트 단위로**
+// 같아야 dedup 과 기존 manifest 가 유지된다. 규칙이 갈리면 여기서 깨진다.
+// (실측 검증: 134MB·625MB 파일에서 조각 수·크기·해시 전부 일치 — 2026-07-30)
+function streamChunks(data: Uint8Array): Uint8Array[] {
+  const out: Uint8Array[] = [];
+  const buf = new Uint8Array(CHUNK_MAX);
+  let filled = 0, pos = 0;
+  for (;;) {
+    while (filled < CHUNK_MAX && pos < data.byteLength) {   // 버퍼를 가득 채운다(계약)
+      const n = Math.min(CHUNK_MAX - filled, data.byteLength - pos);
+      buf.set(data.subarray(pos, pos + n), filled);
+      filled += n; pos += n;
+    }
+    if (filled === 0) return out;
+    const cut = nextCut(buf, filled);
+    out.push(buf.slice(0, cut));
+    buf.copyWithin(0, cut, filled);
+    filled -= cut;
+  }
+}
+
+function pseudo(n: number, seed = 12345): Uint8Array {
+  const a = new Uint8Array(n); let s = seed >>> 0;
+  for (let i = 0; i < n; i++) { s ^= (s << 13) >>> 0; s >>>= 0; s ^= s >>> 17; s ^= (s << 5) >>> 0; s >>>= 0; a[i] = s & 0xff; }
+  return a;
+}
+
+for (const size of [0, 1, CHUNK_MIN - 1, CHUNK_MIN, CHUNK_MIN + 1, CHUNK_MAX - 1, CHUNK_MAX, CHUNK_MAX + 1, 3 * CHUNK_MAX + 7777]) {
+  test(`nextCut: 스트리밍과 전체 버퍼가 같은 경계 (${size}바이트)`, () => {
+    const data = pseudo(size);
+    const whole = cdcChunks(data).map((c) => c.byteLength);
+    const strm = streamChunks(data).map((c) => c.byteLength);
+    assert.deepEqual(strm, whole);
+  });
+}
+
+test("nextCut: 덜 찬 버퍼로 부르면 경계가 달라진다(호출자 계약의 근거)", () => {
+  const data = pseudo(2 * CHUNK_MAX);
+  const full = nextCut(data, data.byteLength);
+  const short = nextCut(data, CHUNK_MIN + 10);   // 계약 위반 예시
+  assert.notEqual(full, short);
 });

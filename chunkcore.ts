@@ -21,21 +21,33 @@ const AVG_MASK = 0xfffff;                    // 하위 20비트 0 → 평균 ~1M
 /** 이 크기 이하 원본은 청크 없이 단일 객체(v1 경로). */
 export const CHUNK_THRESHOLD = 512 * 1024;
 
+/** 버퍼 앞에서부터 **다음 조각의 끝**(바이트 수)을 찾는다. 경계 규칙은 여기 한 곳에만 있다.
+ *
+ * 왜 따로 빼는가: 대형 첨부를 스트리밍으로 올리려면 파일을 조금씩 읽으며 같은 경계를 찾아야 하는데,
+ * 규칙이 두 벌이 되면 언젠가 갈리고 그 순간 **같은 파일이 다른 조각이 되어 dedup 과 기존 manifest 가
+ * 깨진다**(포맷의 일부다). 전체 버퍼 방식과 스트리밍이 이 함수를 공유하면 갈릴 수가 없다.
+ *
+ * 호출자 계약: `len` 은 buf 에 유효한 바이트 수이고, **CHUNK_MAX 까지 채웠거나 파일 끝**이어야 한다.
+ * 덜 찬 상태로 부르면 경계가 앞당겨져 전체 버퍼 방식과 결과가 달라진다. */
+export function nextCut(buf: Uint8Array, len: number): number {
+  const end = Math.min(CHUNK_MAX, len);
+  let h = 0;
+  for (let i = Math.min(CHUNK_MIN, end); i < end; i++) {
+    h = (((h << 1) >>> 0) + GEAR[buf[i]]) >>> 0;
+    if ((h & AVG_MASK) === 0) return i + 1;
+  }
+  return end;
+}
+
 /** 내용 기준 분할. 마지막 조각만 CHUNK_MIN 미만일 수 있다. 빈 입력은 빈 배열.
  * 반환 조각은 입력 버퍼의 subarray 뷰 — 오래 보관하려면 slice할 것. */
 export function cdcChunks(data: Uint8Array): Uint8Array[] {
   const out: Uint8Array[] = [];
   let start = 0;
   while (start < data.byteLength) {
-    const end = Math.min(start + CHUNK_MAX, data.byteLength);
-    let cut = end;
-    let h = 0;
-    for (let i = Math.min(start + CHUNK_MIN, end); i < end; i++) {
-      h = (((h << 1) >>> 0) + GEAR[data[i]]) >>> 0;
-      if ((h & AVG_MASK) === 0) { cut = i + 1; break; }
-    }
-    out.push(data.subarray(start, cut));
-    start = cut;
+    const cut = nextCut(data.subarray(start), data.byteLength - start);
+    out.push(data.subarray(start, start + cut));
+    start += cut;
   }
   return out;
 }

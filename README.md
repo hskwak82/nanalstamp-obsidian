@@ -4,6 +4,12 @@ Seal your notes with tamper-proof timestamps — anchored to the Bitcoin blockch
 
 nanalStamp watches the notes you choose and, whenever a note settles (you pause typing, switch away, or close Obsidian), it computes a **SHA-256 hash on your device** and sends only that hash to the nanalStamp server. The server chains your hashes, signs each entry, and periodically anchors the chain head into Bitcoin via [OpenTimestamps](https://opentimestamps.org). The result is independently verifiable proof that a given note existed, in a given form, at a given time — proof that does not depend on trusting nanalStamp.
 
+![A note sealed by nanalStamp — the status bar shows "Sealed · seq 8 · awaiting anchor"](images/sealed-note.png)
+
+| Everything lives in one menu | Per-note proof & history |
+|---|---|
+| ![The nanalStamp ribbon menu: sealing, proof, submission package, stored notes, dashboard](images/menu.png) | ![Note proof dialog: sealed state, sequence, Bitcoin anchor status, seal history with restore](images/note-proof.png) |
+
 ## Why start today — you can't prove the past retroactively
 
 nanalStamp is **not** just "this file existed once." Its real value is proving that **a note has been worked on continuously, day after day, and that its edit history is an unbroken chain** — not something assembled at the end and back-dated.
@@ -20,21 +26,28 @@ It is **not** a government-accredited or "qualified" timestamp / "공인" servic
 
 ## Privacy & network use (please read)
 
-This plugin connects to **exactly one** remote service — the nanalStamp API at **`https://api.nanalstamp.com`** (and, when you open pricing/account/checkout, its website `https://nanalstamp.com`). No other host is contacted, and no third-party analytics, tracking, or telemetry is used. The server URL is configurable in settings if you self-host. Here is exactly what leaves your device and what does not:
+No third-party analytics, tracking, or telemetry — ever. These are **all** the hosts the plugin can contact, and when:
 
-**What is sent** (only to the endpoint above):
+| Host | When | What is sent |
+|---|---|---|
+| `api.nanalstamp.com` | Always (sealing) | Content hash + path hash + timestamp + your API key — **hashes only, never content** |
+| `api.nanalstamp.com` | Only if you subscribe to **original-file storage** (paid) | Your original notes/attachments, **encrypted on your device before upload** (keys are managed by the service so it can restore your files back to you) |
+| `mempool.space` | Only while building a **submission package** | Bitcoin block heights from your own proofs (public numbers) — to cross-check anchors; no vault data |
+| `github.com` / `api.github.com` | Only if you connect the optional **GitHub offsite archive** | Your original files, pushed to **your own** GitHub repository with a token you authorize (device flow; token stored locally) |
+| `nanalstamp.com` | Pricing/account/checkout links | Opened in your external browser — the plugin itself sends nothing |
+
+The API server URL is configurable in settings (advanced — staging/proxy setups).
+
+**During sealing — the default, always-on activity — what leaves your device is:**
 - The **SHA-256 hash of the note's content** (a 64-character digest — the content cannot be reconstructed from it).
 - The **SHA-256 hash of the note's file path** — so even the folder and file *names* never leave your device in readable form.
 - A client timestamp and, if you are signed in, your API key.
 
-**What is never sent:**
-- Your note content / text.
-- Readable file names or folder names.
-- Any other vault data.
+**Your note content is uploaded only if you explicitly enable a storage feature** (paid original-file storage, or the GitHub offsite archive to your own repo) — sealing itself never sends content, readable file names, or any other vault data.
 
 **When requests happen:**
 - When a watched note settles (debounced), when you leave or close it, and a "catch-up" pass for notes changed since last run.
-- When you explicitly run a command (issue certificate, create public link, anchor now, open pricing/account).
+- When you explicitly run a command (issue certificate, create public link, anchor now, build a submission package, open pricing/account).
 
 You can turn all sending off at any time with **Settings → nanalStamp → Enable sealing**, and you can limit *which* notes are watched with the include/exclude folder settings.
 
@@ -78,25 +91,25 @@ You can turn all sending off at any time with **Settings → nanalStamp → Enab
 | Settle debounce (ms) | Idle time before a note is treated as "paused". |
 | Min interval per note (ms) | Rate-limit seals per note (edits are coalesced). |
 | Retry interval (ms) | How often failed sends are retried. |
-| Server URL | Advanced — change only for self-host/staging. |
+| Server URL | Advanced — staging/proxy setups only. |
 
-## Desktop only
+## Desktop only (for now)
 
-nanalStamp is marked **desktop-only**. On app quit it performs a synchronous last-moment seal that relies on Electron APIs unavailable on mobile.
+nanalStamp is currently **desktop-only**. The local original archive keeps a git repository outside your vault, which needs desktop filesystem access. Mobile support is planned for a future release, once it has been validated as thoroughly as the desktop experience.
 
-## Self-hosting
+## Advanced: Server URL
 
-The plugin talks to a small open server (hash chain + Ed25519 signing + OpenTimestamps anchoring). Point **Server URL** at your own instance if you prefer to run it yourself.
+The **Server URL** setting exists for staging and proxy setups. Verification never requires trusting this server: proofs are independently checkable with the downloadable verifier, standard tools (`sha256sum`, OpenTimestamps clients), or the public `/check` page.
 
 ## License
 
-[MIT](LICENSE) © nanal soft
+[MIT](LICENSE) © nanalLabs
 
 ---
 
 ### 한국어 요약
 
-nanalStamp은 선택한 노트가 정착될 때 **기기에서 SHA-256 해시를 계산**해 그 해시만 보냅니다. 접속하는 서버는 **오직 `https://api.nanalstamp.com` 한 곳뿐**이며(요금제·계정·결제 시에는 웹사이트 `https://nanalstamp.com`), 제3자 분석·추적·텔레메트리는 일절 없습니다. 서버 주소는 자체 호스팅 시 설정에서 바꿀 수 있습니다. **노트 내용도, 읽을 수 있는 파일·폴더 이름도 전송되지 않습니다**(경로도 해시화). 서버는 해시를 체인으로 묶고 Ed25519로 서명한 뒤 주기적으로 **비트코인(OpenTimestamps)** 에 앵커링해, "그 시점에 그 노트가 존재했다"를 서버를 신뢰하지 않고도 검증할 수 있게 합니다.
+nanalStamp은 선택한 노트가 정착될 때 **기기에서 SHA-256 해시를 계산**해 그 해시만 보냅니다. 기본 동작(봉인)에서 접속하는 곳은 `https://api.nanalstamp.com` 하나이고, 제3자 분석·추적·텔레메트리는 일절 없습니다. **봉인에서는 노트 내용도, 읽을 수 있는 파일·폴더 이름도 전송되지 않습니다**(경로도 해시화). 원문이 올라가는 것은 사용자가 켠 보관 기능뿐입니다 — 유료 원문 보관은 **기기에서 암호화 후** 같은 API로, 선택형 GitHub 오프사이트 보관은 **본인 GitHub 저장소**로 갑니다. 제출 패키지를 만들 때는 앵커 검증을 위해 mempool.space 에 블록 번호(증명에 이미 든 공개 숫자)만 조회합니다. 서버는 해시를 체인으로 묶고 Ed25519로 서명한 뒤 주기적으로 **비트코인(OpenTimestamps)** 에 앵커링해, "그 시점에 그 노트가 존재했다"를 서버를 신뢰하지 않고도 검증할 수 있게 합니다.
 
 - 전송 중단: 설정 → nanalStamp → 봉인 켜기 끄기
 - 감시 범위 제한: 포함/제외 폴더 설정

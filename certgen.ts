@@ -42,7 +42,8 @@ export function pitVerifyReadme(safe: string, dateLabel: string, v: PitVerify): 
 // 신뢰 3층: (1) verifyUrl/QR = 서버 원장 진위확인(문서 밖 신뢰) (2) 내장 proof의 Ed25519 서명
 // 실검증(공개키 지문을 /attest/pubkey와 대조) (3) OTS→비트코인(최종 심급). 페이지 자기검증은 편의일 뿐.
 export function pitCertificateHtml(noteName: string, noteContent: string, dateLabel: string, oid: string, v: PitVerify, iconUrl?: string, verifyUrl?: string, qrDataUri?: string, proofRaw?: string): string {
-  const seal = iconUrl ? `<img src="${escapeHtml(iconUrl)}" alt="nanalStamp" width="56" height="56">` : "🔏";
+  // 씰은 정본 nanal.png(iconUrl)만 — 없으면 아무것도 그리지 않는다(자물쇠 이모지 등 대체물 금지, 브랜드 원칙).
+  const seal = iconUrl ? `<img src="${escapeHtml(iconUrl)}" alt="nanalStamp" width="56" height="56">` : "";
   // JSON 안의 "</script" 로 스크립트 블록이 조기 종료되지 않게 — "\/"는 JSON에서 유효한 이스케이프.
   const proofEmbed = proofRaw ? proofRaw.replace(/<\//g, "<\\/") : null;
   let npVerifyUrl: string | null = null;
@@ -204,7 +205,12 @@ ${verifyUrl ? `
       var ok = await crypto.subtle.verify({ name: 'Ed25519' }, key, b64b(entry.signature), hexb(entry.entry_hash));
       var fp = (await sha256hex(pub)).slice(0, 16);
       if (ok){
-        sig.innerHTML = '✓ Issuer Ed25519 signature verified over this record (seq #' + entry.seq + '). Key fingerprint <code>' + fp + '</code> — compare it with the issuer\\u2019s published key (<code>GET /attest/pubkey</code>).';
+        sig.textContent = '';
+        sig.appendChild(document.createTextNode('✓ Issuer Ed25519 signature verified over this record (seq #' + entry.seq + '). Key fingerprint '));
+        var fpEl = document.createElement('code'); fpEl.textContent = fp; sig.appendChild(fpEl);
+        sig.appendChild(document.createTextNode(' — compare it with the issuer\\u2019s published key ('));
+        var epEl = document.createElement('code'); epEl.textContent = 'GET /attest/pubkey'; sig.appendChild(epEl);
+        sig.appendChild(document.createTextNode(').'));
         sig.style.color = '#137a37';
       } else {
         sig.textContent = '⚠️ SIGNATURE INVALID — this record was not signed by the key embedded in this certificate.';

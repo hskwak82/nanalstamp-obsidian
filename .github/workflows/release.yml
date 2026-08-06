@@ -1,0 +1,31 @@
+# 태그 push → 테스트 → 프로덕션 빌드 → 자산 3종 릴리스.
+# 스토어 규칙: 태그 = manifest.json 버전 그대로(v 접두 금지), 자산에 main.js·manifest.json·styles.css.
+name: release
+on:
+  push:
+    tags: ["[0-9]+.[0-9]+.[0-9]+"]
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Tag must equal manifest version
+        run: |
+          V=$(node -p "require('./manifest.json').version")
+          if [ "$V" != "$GITHUB_REF_NAME" ]; then
+            echo "tag $GITHUB_REF_NAME != manifest $V"; exit 1
+          fi
+      - name: Create release with plugin assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" main.js manifest.json styles.css \
+            --title "$GITHUB_REF_NAME" --notes "nanalStamp $GITHUB_REF_NAME — see README for details."

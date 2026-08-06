@@ -12,3 +12,14 @@ export function parseArchiveMsg(msg: string): { seq: string; block: string | nul
   if (!m) return null;
   return { seq: m[1], block: m[2] ?? null };
 }
+
+// 커밋 메시지에서 **노트 경로**를 뽑는다. 아카이브에서 어떤 파일이 이 커밋에 담겼는지 알려면
+// 트리를 통째로 훑는 수밖에 없어 보이지만, 커밋 메시지가 이미 그 답을 갖고 있다.
+// (실측: 트리 순회는 커밋 1,539개 × 파일 수백 개라 끝나지 않았다 — 2026-07-30)
+// seq 앞까지를 greedy 로 잡아 경로에 `· seq` 가 들어가도 마지막 것이 구분자가 된다.
+export function archiveNotePath(msg: string): string | null {
+  const m = msg.match(/^nanalStamp: (.*)·\s*seq\s*\S+/);
+  if (!m) return null;
+  const p = m[1].trim();
+  return p || null;
+}

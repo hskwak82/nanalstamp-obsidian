@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node esbuild.config.mjs",
     "build": "node esbuild.config.mjs production",
-    "test": "esbuild dashcore.test.ts sealscope.test.ts archivemsg.test.ts storagecore.test.ts chunkcore.test.ts cryptocore.test.ts --bundle --platform=node --format=esm --out-extension:.js=.mjs --outdir=.testbuild && node --test .testbuild/dashcore.test.mjs .testbuild/sealscope.test.mjs .testbuild/archivemsg.test.mjs .testbuild/storagecore.test.mjs .testbuild/chunkcore.test.mjs .testbuild/cryptocore.test.mjs"
+    "test": "tsc --noEmit && esbuild i18n.test.ts archivepath.test.ts dashcore.test.ts sealscope.test.ts archivemsg.test.ts storagecore.test.ts chunkcore.test.ts cryptocore.test.ts rewindcore.test.ts notebrowsercore.test.ts taskcore.test.ts packagecore.test.ts holdcore.test.ts scopecore.test.ts chaincore.test.ts reconcilecore.test.ts --bundle --platform=node --format=esm --out-extension:.js=.mjs --outdir=.testbuild && node --test .testbuild/i18n.test.mjs .testbuild/archivepath.test.mjs .testbuild/dashcore.test.mjs .testbuild/sealscope.test.mjs .testbuild/archivemsg.test.mjs .testbuild/storagecore.test.mjs .testbuild/chunkcore.test.mjs .testbuild/cryptocore.test.mjs .testbuild/rewindcore.test.mjs .testbuild/notebrowsercore.test.mjs .testbuild/taskcore.test.mjs .testbuild/packagecore.test.mjs .testbuild/holdcore.test.mjs .testbuild/scopecore.test.mjs .testbuild/chaincore.test.mjs .testbuild/reconcilecore.test.mjs",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "isomorphic-git": "^1.38.6",

@@ -1,7 +1,7 @@
 // dashcore 순수 집계 로직 테스트 — 실행: npm test (esbuild 번들 → node --test)
 import { test } from "node:test";
 import assert from "node:assert";
-import { parseArchiveCommit, topFolder, coverage, gaps, timeline, certCandidates, heatmapWeeks, heatmapCounts, syncStatus } from "./dashcore";
+import { parseArchiveCommit, topFolder, coverage, gaps, timeline, certCandidates, heatmapWeeks, heatmapCounts, syncStatus, periodKey, previousPeriod, periodLabel } from "./dashcore";
 
 test("parseArchiveCommit: 표준 메시지에서 경로·seq·블록을 뽑는다", () => {
   const e = parseArchiveCommit("nanalStamp: proj/sub/노트 A.md · seq 42 · ₿#901234", 1700000000000);
@@ -119,14 +119,44 @@ test("heatmapWeeks: 12주×7일 격자, 마지막 셀이 오늘, 봉인일 매�
   assert.strictEqual(all[0].date, "2026-04-17"); // 84일 전(83일 차감)
 });
 
-test("syncStatus: 원장 대비 아카이브/미러 대기 수와 최신 블록", () => {
-  const s = syncStatus(
-    { "a.md": "H1", "b.md": "H2", "c.md": "H3" },      // ledgerIndex: 확정 3건
-    { "a.md": "H1", "b.md": "OLD" },                    // archiveIndex: b는 구해시, c는 없음 → 대기 2
-    { "a.md": "H1" },                                   // mirrorIndex: b,c 없음 → 대기 2
-    [{ notePath: "a.md", seq: "1", block: "900500", ts: 1 }, { notePath: "b.md", seq: "2", block: "?", ts: 2 }],
-  );
-  assert.deepStrictEqual(s, { confirmed: 3, archivePending: 2, mirrorPending: 2, latestBlock: 900500 });
+const SYNC_LEDGER = { "a.md": "H1", "b.md": "H2", "c.md": "H3" }; // 확정 3건
+const SYNC_ARCHIVE = { "a.md": "H1", "b.md": "OLD" };             // b는 구해시, c는 없음 → 대기 2
+const SYNC_MIRROR = { "a.md": "H1" };                             // b,c 없음 → 대기 2
+const SYNC_ENTRIES = [{ notePath: "a.md", seq: "1", block: "900500", ts: 1 }, { notePath: "b.md", seq: "2", block: "?", ts: 2 }];
+const allEligible = () => true;
+
+test("syncStatus: 원장 대비 아카이브/미러 대기 수와 최신 블록(nanal 꺼짐=null)", () => {
+  const s = syncStatus(SYNC_LEDGER, SYNC_ARCHIVE, SYNC_MIRROR, SYNC_ENTRIES, null, allEligible);
+  assert.deepStrictEqual(s, { confirmed: 3, archivePending: 2, mirrorPending: 2, latestBlock: 900500, nanalDone: 0, nanalPending: 0 });
+});
+
+test("syncStatus: nanalIndex가 null이면 eligible과 무관하게 nanal 축은 항상 0", () => {
+  const s = syncStatus(SYNC_LEDGER, SYNC_ARCHIVE, SYNC_MIRROR, SYNC_ENTRIES, null, () => false);
+  assert.strictEqual(s.nanalDone, 0);
+  assert.strictEqual(s.nanalPending, 0);
+});
+
+test("syncStatus: nanal 켜짐 + 전부 완료(최신 해시로 업로드됨)", () => {
+  const nanalIndex = { "a.md": "H1", "b.md": "H2", "c.md": "H3" }; // 전부 최신 해시
+  const s = syncStatus(SYNC_LEDGER, SYNC_ARCHIVE, SYNC_MIRROR, SYNC_ENTRIES, nanalIndex, allEligible);
+  assert.strictEqual(s.nanalDone, 3);
+  assert.strictEqual(s.nanalPending, 0);
+});
+
+test("syncStatus: nanal 켜짐 + 일부 대기(구 해시·미존재 혼합)", () => {
+  const nanalIndex = { "a.md": "H1", "b.md": "OLD" }; // b는 구해시, c는 없음 → 대기 2, 완료 1
+  const s = syncStatus(SYNC_LEDGER, SYNC_ARCHIVE, SYNC_MIRROR, SYNC_ENTRIES, nanalIndex, allEligible);
+  assert.strictEqual(s.nanalDone, 1);
+  assert.strictEqual(s.nanalPending, 2);
+});
+
+test("syncStatus: nanalEligible 필터 — 대상 아닌 경로는 done/pending 어느 쪽에도 안 잡힘", () => {
+  const nanalIndex = { "a.md": "H1" }; // a만 업로드됨
+  // b, c는 nanalBackfill=false 시나리오에서 mtime 필터로 제외됐다고 가정(eligible=false)
+  const eligible = (p: string) => p === "a.md";
+  const s = syncStatus(SYNC_LEDGER, SYNC_ARCHIVE, SYNC_MIRROR, SYNC_ENTRIES, nanalIndex, eligible);
+  assert.strictEqual(s.nanalDone, 1); // a만 집계
+  assert.strictEqual(s.nanalPending, 0); // b, c는 eligible=false라 대기로도 안 잡힘
 });
 
 test("heatmapCounts: 달력 정렬(월요일 시작)·레벨 경계·미래 칸", () => {
@@ -146,4 +176,30 @@ test("heatmapCounts: 달력 정렬(월요일 시작)·레벨 경계·미래 칸"
   assert.strictEqual(last[3].date, "2026-07-09");
   assert.strictEqual(last[4].future, true); // 07-10(금)은 미래
   assert.strictEqual(grid[0][0].date, "2026-04-20"); // 12주 전 월요일
+});
+
+// digest 주기(2026-08-02) — **서버 digests.rs::period_key 와 같은 표기여야 한다.**
+// 어긋나면 팀원이 쓴 글이 서버 눈에는 다른 기간이라 영원히 미작성으로 남는다.
+test("periodKey: 주간·월간·분기 표기가 서버와 같다", () => {
+  assert.strictEqual(periodKey("monthly", "2026-08-02"), "2026-08");
+  assert.strictEqual(periodKey("monthly", "2026-12-31"), "2026-12");
+  assert.strictEqual(periodKey("quarterly", "2026-08-02"), "2026-Q3");
+  assert.strictEqual(periodKey("quarterly", "2026-01-01"), "2026-Q1");
+  assert.strictEqual(periodKey("quarterly", "2026-12-31"), "2026-Q4");
+  assert.strictEqual(periodKey("weekly", "2026-08-02"), "2026-W31");
+  assert.strictEqual(periodKey("weekly", "2026-01-01"), "2026-W01");
+});
+
+test("previousPeriod: 진행 중인 기간을 가리키지 않는다", () => {
+  assert.strictEqual(previousPeriod("monthly", "2026-08-01"), "2026-07");
+  assert.strictEqual(previousPeriod("monthly", "2026-01-15"), "2025-12");
+  assert.strictEqual(previousPeriod("quarterly", "2026-07-01"), "2026-Q2");
+  assert.strictEqual(previousPeriod("quarterly", "2026-01-05"), "2025-Q4");
+  assert.strictEqual(previousPeriod("weekly", "2026-08-02"), "2026-W30");
+});
+
+test("periodLabel: 사람이 읽는 이름", () => {
+  assert.strictEqual(periodLabel("2026-07"), "2026년 7월");
+  assert.strictEqual(periodLabel("2026-Q3"), "2026년 3분기");
+  assert.strictEqual(periodLabel("2026-W31"), "2026년 31주");
 });

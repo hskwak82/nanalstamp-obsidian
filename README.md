@@ -103,7 +103,7 @@ The **Server URL** setting exists for staging and proxy setups. Verification nev
 
 ## License
 
-[MIT](LICENSE) © nanalLabs
+[GPL-3.0](LICENSE) © 2026 nanalLabs — free to use, study, and modify; if you distribute a modified version, it must remain open under the same license.
 
 ---
 

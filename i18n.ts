@@ -18,6 +18,7 @@ export function pickLang(): Lang {
   const w = (typeof window !== "undefined" ? window : undefined) as unknown as
     { localStorage?: Storage; moment?: { locale?: () => string } } | undefined;
   const cands = [
+    // eslint-disable-next-line obsidianmd/prefer-get-language -- getLanguage() needs a newer minAppVersion; keep the documented fallback chain
     w?.localStorage?.getItem?.("language"),
     w?.moment?.locale?.(),
     typeof document !== "undefined" ? document.documentElement?.lang : undefined,
@@ -608,7 +609,7 @@ export const STR = {
     restoreVaultDone: (n: number, dir: string) => `Rebuild complete: ${n} notes → ${dir}`,
     restoreVaultNone: "No sealed notes in the selected range.",
     restoreReportName: "_restore-report.md",
-    restoreRemaining: (r: number, _l: number) => `🎫 ${r} free left`,
+    restoreRemaining: (r: number) => `🎫 ${r} free left`,
     restoreCredits: (c: number) => `🎟 ${c} extra pass(es) — you can keep restoring`,
     restoreBuySoon: "Extra passes will be purchasable soon",
     egressLimit: "Monthly download limit reached — resets next month",
@@ -1664,7 +1665,7 @@ export const STR = {
     restoreVaultDone: (n: number, dir: string) => `재구성 완료: ${n}개 → ${dir}`,
     restoreVaultNone: "선택한 범위에 봉인 노트가 없습니다.",
     restoreReportName: "_재구성-리포트.md",
-    restoreRemaining: (r: number, _l: number) => `🎫 무료 ${r}회 남음`,
+    restoreRemaining: (r: number) => `🎫 무료 ${r}회 남음`,
     restoreCredits: (c: number) => `🎟 추가 이용권 ${c}회 보유 — 계속 사용할 수 있습니다`,
     restoreBuySoon: "추가 이용권 구매는 곧 제공됩니다",
     egressLimit: "이번 달 다운로드 한도에 도달했습니다 — 다음 달에 초기화됩니다",
@@ -2165,7 +2166,7 @@ export let tpl = TPL[pickLang()];
 // 언어 적용: 설정이 auto면 자동감지, 아니면 강제(en/ko). t/tpl 재설정.
 // (구 applyLang(s: AttestSettings) — AttestSettings 역참조를 끊으려 설정값만 받는다.)
 export function setLang(pref: "auto" | "en" | "ko") {
-  const lang: Lang = pref === "auto" ? pickLang() : (pref as Lang);
+  const lang: Lang = pref === "auto" ? pickLang() : (pref);
   t = STR[lang];
   tpl = TPL[lang];
 }

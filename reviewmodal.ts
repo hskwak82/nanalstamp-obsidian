@@ -27,12 +27,12 @@ export class ReviewResultModal extends NanalModal {
     contentEl.createEl("p", { text: t.reviewRejectedDesc(items.length) });
     for (const it of items) {
       const box = contentEl.createDiv({ cls: "nanalstamp-pkg-preview" });
-      box.createEl("div", {
+      box.createDiv({
         text: it.title ? `${it.title} · ${it.seq}번 기록` : `${it.seq}번 기록`,
         cls: "setting-item-name",
       });
       // 사유는 점검자가 쓴 글이다 — 줄바꿈을 살려 그대로 보여준다.
-      const p = box.createEl("div", { cls: "nanalstamp-review-comment" });
+      const p = box.createDiv({ cls: "nanalstamp-review-comment" });
       p.setText(it.comment || t.reviewNoComment);
     }
 
@@ -101,7 +101,8 @@ export class ReviewRequestModal extends NanalModal {
 
     new Setting(contentEl)
       .setName(t.reviewReqNote)
-      .addTextArea((ta) => ta.setPlaceholder(t.reviewReqNotePh).onChange((v) => { this.note = v; }));
+      .addTextArea((ta) => ta.setPlaceholder(t.reviewReqNotePh).onChange((v) => { this.note = v; }))
+      .settingEl.addClass("nanalstamp-m-stack");
 
     const msg = contentEl.createEl("p", { cls: "setting-item-description" });
     new Setting(contentEl)

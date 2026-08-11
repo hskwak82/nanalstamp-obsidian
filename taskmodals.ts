@@ -39,7 +39,8 @@ export class TaskComposeModal extends NanalModal {
       tx.onChange((v) => (this.title = v));
       tx.inputEl.addClass("nanalstamp-input-full");
     });
-    new Setting(contentEl).setName(t.taskFieldBody).addTextArea((ta) => ta.onChange((v) => (this.body = v)));
+    new Setting(contentEl).setName(t.taskFieldBody).addTextArea((ta) => ta.onChange((v) => (this.body = v)))
+      .settingEl.addClass("nanalstamp-m-stack");
     // §3 연구과제 — 캐시 즉시 채움 + 갱신 후 신규분 추가(roster 지연 로드 관례).
     new Setting(contentEl).setName(t.taskFieldProject).addDropdown((dd) => {
       dd.addOption("", t.taskProjectNone);
@@ -62,12 +63,12 @@ export class TaskComposeModal extends NanalModal {
       dd.onChange((v) => { this.priority = v; });
     });
     new Setting(contentEl).setName(t.taskFieldStart).addText((tx) => {
-      (tx.inputEl as HTMLInputElement).type = "date";
+      (tx.inputEl).type = "date";
       tx.setValue(this.startDate);
       tx.onChange((v) => (this.startDate = v));
     });
     new Setting(contentEl).setName(t.taskFieldDue).addText((tx) => {
-      (tx.inputEl as HTMLInputElement).type = "date";
+      (tx.inputEl).type = "date";
       tx.setValue(this.due);
       tx.onChange((v) => { this.due = v; });
     });
@@ -92,7 +93,7 @@ export class TaskComposeModal extends NanalModal {
         const label = rosterLabel(m);
         this.assigneeLabels.set(m.userId, label);
         const row = assigneeBox.createEl("label", { cls: "nanalstamp-task-assignee-row" });
-        const cb = row.createEl("input", { type: "checkbox" }) as HTMLInputElement;
+        const cb = row.createEl("input", { type: "checkbox" });
         cb.checked = this.assignees.has(m.userId);
         cb.addEventListener("change", () => {
           if (cb.checked) this.assignees.add(m.userId);
@@ -163,7 +164,7 @@ export class TaskRequestModal extends NanalModal {
       });
     });
     new Setting(contentEl).setName(t.taskFieldDue).addText((tx) => {
-      (tx.inputEl as HTMLInputElement).type = "date";
+      (tx.inputEl).type = "date";
       tx.setValue(this.due);
       tx.onChange((v) => (this.due = v));
     });
@@ -200,7 +201,7 @@ export class TaskDeclineModal extends NanalModal {
         ta.setPlaceholder(t.taskDeclineReasonPh);
         ta.onChange((v) => (this.reason = v));
         ta.inputEl.rows = 4;
-      });
+      }).settingEl.addClass("nanalstamp-m-stack");
     const dBtns = new Setting(contentEl).addButton((b) =>
       b.setButtonText(t.taskBtnDecline).setWarning().onClick(() => void this.submit()));
     dBtns.settingEl.addClass("nanalstamp-m-actions");
@@ -291,7 +292,7 @@ export class TaskDetailModal extends NanalModal {
     const scroll = contentEl.createDiv({ cls: "nanalstamp-td-scroll" });
 
     head.createEl("h3", { text: t.taskDetailTitle });
-    head.createEl("div", { cls: "nanalstamp-td-title", text: task.title });
+    head.createDiv({ cls: "nanalstamp-td-title", text: task.title });
 
     // 상태·우선순위 뱃지 — 표에서 보던 것과 같은 클래스를 써 시각을 일치시킨다.
     const pills = head.createDiv({ cls: "nanalstamp-td-pills" });
@@ -442,7 +443,7 @@ export class TaskDetailModal extends NanalModal {
       const syncSend = () => { send.disabled = !ta.value.trim(); };
       syncSend();
       ta.addEventListener("input", syncSend);
-      send.addEventListener("click", async () => {
+      const submitReply = async () => {
         const body = ta.value.trim();
         if (!body) return; // 빈 본문 무시
         send.disabled = true;
@@ -463,7 +464,8 @@ export class TaskDetailModal extends NanalModal {
         void this.plugin.refreshTaskSealSummary(); // 방금 봉인이 늘었다 — 상태바가 따라오게
         this.stickToBottom = true;   // 이번 렌더는 맨 아래로(새 회신은 목록 끝에 붙는다)
         await this.loadReplies(); // 목록 새로고침 → render()
-      });
+      };
+      send.addEventListener("click", () => void submitReply());
     } else {
       // 권한 없음 — 읽기전용 안내
       const notice = contentEl.createDiv({ cls: "nanalstamp-td-reply-notice" });  // 푸터 — 스크롤 밖
@@ -516,7 +518,7 @@ export class TaskDoneModal extends NanalModal {
         ta.setPlaceholder(t.taskDoneCommentPh);
         ta.onChange((v) => (this.comment = v));
         ta.inputEl.rows = 5;
-      });
+      }).settingEl.addClass("nanalstamp-m-stack");
     // 결과 노트(선택) — 업무함이 증거 파이프라인의 입구가 되는 지점. 고르면 완료와 함께
     // (1) 서버에 경로 저장 (2) 그 노트를 즉시 봉인 (3) 업무에 과제가 있으면 그 과제에 귀속.
     // 자동으로 찾아 붙이지 않는다(§6) — 무엇이 산출물인지는 수행자만 안다.
@@ -603,7 +605,7 @@ export class TaskReopenModal extends NanalModal {
         ta.setPlaceholder(t.taskReopenReasonPh);
         ta.onChange((v) => (this.reason = v));
         ta.inputEl.rows = 4;
-      });
+      }).settingEl.addClass("nanalstamp-m-stack");
     const rBtns = new Setting(contentEl).addButton((b) =>
       b.setButtonText(t.taskReopenBtn).setWarning().onClick(() => void this.submit()));
     rBtns.settingEl.addClass("nanalstamp-m-actions");
@@ -686,8 +688,8 @@ export class FolderCreateModal extends NanalModal {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.createEl("h3", { text: t.folderCreateTitle });
-    const listEl = contentEl.createEl("div");
-    listEl.createEl("div", { text: t.folderCreateLoading, cls: "setting-item-description" });
+    const listEl = contentEl.createDiv();
+    listEl.createDiv({ text: t.folderCreateLoading, cls: "setting-item-description" });
     void this.load(listEl);
   }
   onClose() { this.contentEl.empty(); }
@@ -716,19 +718,19 @@ export class FolderCreateModal extends NanalModal {
     listEl.empty();
     if (!this.rows.length) {
       const msg = this.plugin.teamRoot() ? t.folderCreateEmpty : t.folderCreateNoRoot;
-      listEl.createEl("div", { text: msg, cls: "setting-item-description" });
+      listEl.createDiv({ text: msg, cls: "setting-item-description" });
       return;
     }
     for (const row of this.rows) {
       // 행 전체가 <label>이다 — 체크박스와 암묵적으로 연결되므로 이름·경로 어디를 눌러도 토글되고,
       // 스크린리더가 체크박스 이름으로 행 텍스트를 읽는다(체크박스만 단독으로 두면 이름이 없다).
       const rowEl = listEl.createEl("label", { cls: "nanalstamp-fc-row" });
-      const check = rowEl.createEl("input", { attr: { type: "checkbox" } }) as HTMLInputElement;
+      const check = rowEl.createEl("input", { attr: { type: "checkbox" } });
       check.addEventListener("change", () => this.updateMakeEnabled());
-      const labelWrap = rowEl.createEl("div", { cls: "nanalstamp-fc-label" });
-      labelWrap.createEl("div", { text: row.label });
-      labelWrap.createEl("div", { text: row.pathLabel, cls: "nanalstamp-fc-sub" });
-      const badge = rowEl.createEl("span", { cls: "nanalstamp-fc-badge" });
+      const labelWrap = rowEl.createDiv({ cls: "nanalstamp-fc-label" });
+      labelWrap.createDiv({ text: row.label });
+      labelWrap.createDiv({ text: row.pathLabel, cls: "nanalstamp-fc-sub" });
+      const badge = rowEl.createSpan({ cls: "nanalstamp-fc-badge" });
       row.checkEl = check;
       row.badgeEl = badge;
       this.applyRowState(row);
@@ -737,11 +739,11 @@ export class FolderCreateModal extends NanalModal {
     // **봉인될 수 있다**(되돌릴 수 없다). 그래서 경고를 체크박스 바로 아래 붙인다.
     if (this.hasSamples()) {
       const sw = this.contentEl.createEl("label", { cls: "nanalstamp-fc-row" });
-      const sc = sw.createEl("input", { attr: { type: "checkbox" } }) as HTMLInputElement;
+      const sc = sw.createEl("input", { attr: { type: "checkbox" } });
       sc.checked = this.withSamples;
-      const wrap = sw.createEl("div", { cls: "nanalstamp-fc-label" });
-      wrap.createEl("div", { text: t.kitSamplesInclude });
-      wrap.createEl("div", { text: t.kitSamplesWarn, cls: "nanalstamp-fc-sub" });
+      const wrap = sw.createDiv({ cls: "nanalstamp-fc-label" });
+      wrap.createDiv({ text: t.kitSamplesInclude });
+      wrap.createDiv({ text: t.kitSamplesWarn, cls: "nanalstamp-fc-sub" });
       sc.addEventListener("change", () => {
         this.withSamples = sc.checked;
         // 대상 경로가 통째로 바뀌므로 목록을 다시 만든다(뱃지·개수도 함께 갱신된다).
@@ -758,6 +760,7 @@ export class FolderCreateModal extends NanalModal {
     const check = row.checkEl, badge = row.badgeEl;
     if (!check || !badge) return;
     badge.removeClass("is-error"); badge.removeClass("is-muted"); // 상태는 배타적 — 남은 클래스가 섞이지 않게
+    check.closest(".nanalstamp-fc-row")?.toggleClass("is-locked", row.failed || row.status.state === "done");
     if (row.failed) {
       check.checked = false; check.disabled = true;
       badge.setText(t.folderCreateLoadFail); badge.addClass("is-error");
@@ -853,12 +856,12 @@ export class TaskEditModal extends NanalModal {
       dd.onChange((v) => (this.priority = v));
     });
     new Setting(contentEl).setName(t.taskFieldStart).addText((tx) => {
-      (tx.inputEl as HTMLInputElement).type = "date";
+      (tx.inputEl).type = "date";
       tx.setValue(this.startDate);
       tx.onChange((v) => (this.startDate = v));
     });
     new Setting(contentEl).setName(t.taskFieldDue).addText((tx) => {
-      (tx.inputEl as HTMLInputElement).type = "date";
+      (tx.inputEl).type = "date";
       tx.setValue(this.due);
       tx.onChange((v) => (this.due = v));
     });
@@ -950,7 +953,7 @@ export class FolderConflictModal extends NanalModal {
     for (const path of this.conflicts) {
       const row = contentEl.createDiv({ cls: "nanalstamp-fcf-row" });
       row.createDiv({ text: path, cls: "nanalstamp-fcf-path" });
-      const input = row.createEl("input", { attr: { type: "text" } }) as HTMLInputElement;
+      const input = row.createEl("input", { attr: { type: "text" } });
       input.value = conflictRenameSuggestion(path, existing, t.fcfSuffix);
       const btn = row.createEl("button", { text: t.fcfRename });
       btn.addEventListener("click", () => void this.rename(path, input.value.trim(), row));
@@ -970,7 +973,7 @@ export class FolderConflictModal extends NanalModal {
     try {
       // fileManager.renameFile — 내부 링크까지 갱신하는 공식 경로(vault.rename은 링크를 깨뜨린다).
       await this.app.fileManager.renameFile(af, to);
-    } catch (_e) {
+    } catch {
       new Notice(t.fcfRenameFail);
       return;
     }

@@ -67,7 +67,7 @@ export function scopeDocument(body: string, prev: string, bodyHash: string): str
     "형식": "nanalstamp-scope-v1",
     "직전_범위_문서_해시": prev || SCOPE_ZERO,
     "본문_해시": bodyHash,
-    "본문": JSON.parse(body),
+    "본문": JSON.parse(body) as unknown,
   }, null, 2);
 }
 

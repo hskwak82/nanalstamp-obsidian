@@ -4,10 +4,50 @@ import { archiveDirNameForVault } from "./archivepath";
 // pathutil.ts — 해시·경로·파일명 순수 함수 + Node(데스크탑) lazy require. main.ts에서 순수 이동(2026-07-26).
 // 모듈 어디서나 필요하고 main.ts의 상태에 의존하지 않는다 — 값 순환 참조를 만들지 않는 위치.
 
+// Node 모듈 최소 타입 — 이 플러그인이 실제 부르는 표면만 선언한다(@types/node 미사용).
+// 콜백형 멤버(readFile 등)는 isomorphic-git FsClient 구조 호환용으로만 존재한다.
+export interface NodeFs {
+  readFile: Function; writeFile: Function; unlink: Function; readdir: Function;
+  mkdir: Function; rmdir: Function; stat: Function; lstat: Function;
+  existsSync(p: string): boolean;
+  readFileSync(p: string, enc: "utf8"): string;
+  readFileSync(p: string): Uint8Array;
+  writeFileSync(p: string, data: string | Uint8Array, enc?: "utf8"): void;
+  mkdirSync(p: string, opts?: { recursive?: boolean }): void;
+  readdirSync(p: string): string[];
+  copyFileSync(src: string, dst: string): void;
+  cpSync(src: string, dst: string, opts?: { recursive?: boolean }): void;
+  statSync(p: string): { size: number; mtimeMs: number; isDirectory(): boolean };
+  chmodSync(p: string, mode: number): void;
+  accessSync(p: string, mode?: number): void;
+  constants: { W_OK: number };
+  openSync(p: string, flags: string): number;
+  readSync(fd: number, buf: Uint8Array, offset: number, length: number, position: number): number;
+  closeSync(fd: number): void;
+}
+export interface NodePath {
+  join(...p: string[]): string;
+  dirname(p: string): string;
+  resolve(...p: string[]): string;
+  sep: string;
+}
+export interface NodeHash { update(d: string | Uint8Array, enc?: "utf8"): NodeHash; digest(enc: "hex"): string }
+export interface ElectronRemote {
+  dialog?: {
+    showOpenDialog(opts: { properties: string[] }): Promise<{ canceled: boolean; filePaths?: string[] }>;
+  };
+}
+
 // window.require는 데스크탑에만 존재 → 모듈 로드 시 정적 접근하면 모바일에서 플러그인
 // 전체 로드가 깨진다. 그래서 lazy로 필요 시점에만 require한다.
-export function nodeReq(mod: string): any {
-  const r = (window as unknown as { require?: (m: string) => any }).require;
+export function nodeReq(mod: "fs"): NodeFs;
+export function nodeReq(mod: "path"): NodePath;
+export function nodeReq(mod: "os"): { homedir(): string };
+export function nodeReq(mod: "crypto"): { createHash(alg: string): NodeHash };
+export function nodeReq(mod: "@electron/remote"): ElectronRemote;
+export function nodeReq(mod: string): unknown;
+export function nodeReq(mod: string): unknown {
+  const r = (window as unknown as { require?: (m: string) => unknown }).require;
   if (!r) throw new Error("Node require unavailable (desktop only)");
   return r(mod);
 }
@@ -23,6 +63,11 @@ export function defaultArchivePath(vaultName?: string): string {
 // 플레이스홀더 표시용(실패해도 렌더가 안 깨지게 "" 반환).
 export function defaultArchivePathSafe(vaultName?: string): string {
   try { return defaultArchivePath(vaultName); } catch { return ""; }
+}
+
+// catch 변수는 unknown(strict) — 메시지 추출을 한 곳으로 모아 `catch (e: any)` 를 없앤다.
+export function errMsg(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
 }
 
 export function parseFolders(s: string): string[] {
@@ -52,7 +97,7 @@ export async function hashPath(p: string): Promise<string> {
 // UTF-8 문자열 → base64(GitHub Contents API content 필드용). btoa는 유니코드를 못 다뤄 사용 불가.
 export function toBase64(text: string): string {
   const bytes = new TextEncoder().encode(text);
-  return arrayBufferToBase64(bytes.buffer as ArrayBuffer);
+  return arrayBufferToBase64(bytes.buffer);
 }
 
 // 노트 경로를 파일/URL 안전한 평면 이름으로 변환(폴더 구분은 __로 평탄화, .md 제거).

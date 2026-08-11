@@ -4,7 +4,7 @@
 
 import { App, Modal, Notice, PluginSettingTab, Setting, TFolder } from "obsidian";
 import { t } from "./i18n";
-import { nodeReq, defaultArchivePathSafe, parseFolders, basenameOf } from "./pathutil";
+import { nodeReq, errMsg, defaultArchivePathSafe, parseFolders, basenameOf } from "./pathutil";
 import { TASK_INBOX_VIEW_TYPE } from "./constants";
 import { GitHubConnectModal, OnboardingScopeModal } from "./modals";
 import { ConfirmModal } from "./modalbase";
@@ -27,7 +27,7 @@ export class NanalStampSettingTab extends PluginSettingTab {
       .setDesc(desc)
       .addText((tx) =>
         tx.setValue(String(this.plugin.settings[key])).onChange(async (v) => {
-          (this.plugin.settings as any)[key] = v.trim();
+          (this.plugin.settings as unknown as Record<string, unknown>)[key] = v.trim();
           await this.plugin.saveSettings();
         })
       );
@@ -79,10 +79,10 @@ export class NanalStampSettingTab extends PluginSettingTab {
       .setName(t.loginName)
       .setDesc(t.loginDesc)
       .addText((tx) => tx.setPlaceholder(t.emailPlaceholder).onChange((v) => (loginEmail = v)))
-      .addText((tx) => { tx.setPlaceholder(t.pwPlaceholder).onChange((v) => (loginPw = v)); (tx.inputEl as HTMLInputElement).type = "password"; })
+      .addText((tx) => { tx.setPlaceholder(t.pwPlaceholder).onChange((v) => (loginPw = v)); (tx.inputEl).type = "password"; })
       .addButton((b) => b.setButtonText(t.registerBtn).onClick(async () => {
         try { await this.plugin.accountRegister(loginEmail, loginPw); new Notice(t.registerSent(loginEmail)); }
-        catch (e: any) { new Notice(t.registerFail(e?.message ?? String(e))); }
+        catch (e) { new Notice(t.registerFail(errMsg(e))); }
       }))
       .addButton((b) => b.setButtonText(t.loginBtn).setCta().onClick(async () => {
         try {
@@ -93,14 +93,14 @@ export class NanalStampSettingTab extends PluginSettingTab {
           // 로컬 값이라 재로그인 시에도 다시 뜰 수 있다(허용 — 과도한 알림보단 1회 더 보는 편이 안전).
           if (!this.plugin.settings.scopeChosen && !this.plugin.scopeModalOpen) new OnboardingScopeModal(this.app, this.plugin).open();
         }
-        catch (e: any) { new Notice(t.loginFail(e?.message ?? String(e))); }
+        catch (e) { new Notice(t.loginFail(errMsg(e))); }
       }));
     // 비밀번호 재설정 — 작은 텍스트 링크: 이메일이 입력돼 있으면 재설정 메일 발송, 아니면 웹 재설정 페이지로.
     const reset = card.createEl("a", { text: t.resetName, cls: "nanalstamp-reset-link" });
     reset.onclick = async () => {
       if (loginEmail.trim()) {
         try { await this.plugin.accountResetRequest(loginEmail); new Notice(t.resetSent(loginEmail)); }
-        catch (e: any) { new Notice(t.resetFail(e?.message ?? String(e))); }
+        catch (e) { new Notice(t.resetFail(errMsg(e))); }
       } else {
         this.plugin.openExternal("/reset");
       }
@@ -263,13 +263,13 @@ export class NanalStampSettingTab extends PluginSettingTab {
           .setDesc(t.teamKeyDesc)
           .addText((tx) => tx.setPlaceholder(t.emailPlaceholder).onChange((v) => (te = v)))
           .addText((tx) => { tx.setPlaceholder(t.pwPlaceholder).onChange((v) => (tp = v));
-                             (tx.inputEl as HTMLInputElement).type = "password"; })
+                             (tx.inputEl).type = "password"; })
           .addButton((b) => b.setButtonText(t.teamKeyLink).setCta().onClick(async () => {
             try {
               await this.plugin.teamAccountLogin(te, tp);
               new Notice(t.teamKeyLinked(te.trim()));
               this.display();
-            } catch (e: any) { new Notice(t.loginFail(e?.message ?? String(e))); }
+            } catch (e) { new Notice(t.loginFail(errMsg(e))); }
           }));
       }
       // 자동 적용이 꺼져 있으면 수동 재수신 버튼도 숨긴다(끈 상태에서는 트래픽 없음 — 기존 결정 유지).
@@ -389,7 +389,7 @@ export class NanalStampSettingTab extends PluginSettingTab {
       if (holds.length > 0) {
         new Setting(body).setName(t.holdsTitle(holds.length)).setHeading();
         const box = body.createDiv({ cls: "nanalstamp-pkg-preview" });
-        box.createEl("div", { text: t.holdsDesc, cls: "setting-item-description" });
+        box.createDiv({ text: t.holdsDesc, cls: "setting-item-description" });
         for (const [notePath, h] of holds) {
           const row = box.createDiv({ cls: "setting-item-description" });
           row.setText(t.holdDetailLine(
@@ -411,14 +411,14 @@ export class NanalStampSettingTab extends PluginSettingTab {
     // 문서는 이 기기의 DEK 로만 열린다 — 서버는 암호문만 갖고 있다.
     new Setting(body).setName(t.scopeHistHead).setHeading();
     const histBox = body.createDiv();
-    histBox.createEl("div", { text: t.scopeHistLoading, cls: "setting-item-description" });
+    histBox.createDiv({ text: t.scopeHistLoading, cls: "setting-item-description" });
     void this.plugin.scopeHistory().then((rows) => {
       histBox.empty();
       if (!rows.length) {
-        histBox.createEl("div", { text: t.scopeHistEmpty, cls: "setting-item-description" });
+        histBox.createDiv({ text: t.scopeHistEmpty, cls: "setting-item-description" });
         return;
       }
-      histBox.createEl("div", { text: t.scopeHistDesc, cls: "setting-item-description" });
+      histBox.createDiv({ text: t.scopeHistDesc, cls: "setting-item-description" });
       const tbl = histBox.createEl("table", { cls: "nanalstamp-hist-table" });
       const head = tbl.createEl("tr");
       for (const h of [t.scopeHistN, t.scopeHistWhen, t.scopeHistProof, t.scopeHistScope]) {
@@ -443,21 +443,21 @@ export class NanalStampSettingTab extends PluginSettingTab {
         const b = r.doc["본문"] ?? {};
         const inc: string[] = b["포함_폴더"] ?? [];
         const exc: string[] = b["제외_폴더"] ?? [];
-        cell.createEl("div", { text: inc.length ? inc.join(" · ") : t.scopeHistWhole });
-        if (exc.length) cell.createEl("div", { text: t.scopeHistExclude(exc.join(" · ")), cls: "setting-item-description" });
+        cell.createDiv({ text: inc.length ? inc.join(" · ") : t.scopeHistWhole });
+        if (exc.length) cell.createDiv({ text: t.scopeHistExclude(exc.join(" · ")), cls: "setting-item-description" });
         const link = cell.createEl("a", { text: t.scopeHistOpen, cls: "nanalstamp-hist-open" });
         link.onclick = () => {
           const m = new Modal(this.app);
           m.titleEl.setText(t.scopeHistDocTitle(r.n));
           const pre = m.contentEl.createEl("pre", { cls: "nanalstamp-doc-pre" });
           pre.setText(JSON.stringify(r.doc, null, 2));
-          m.contentEl.createEl("div", { text: t.scopeHistDocNote(r.docHash), cls: "setting-item-description" });
+          m.contentEl.createDiv({ text: t.scopeHistDocNote(r.docHash), cls: "setting-item-description" });
           m.open();
         };
       }
     }).catch(() => {
       histBox.empty();
-      histBox.createEl("div", { text: t.scopeHistFail, cls: "setting-item-description" });
+      histBox.createDiv({ text: t.scopeHistFail, cls: "setting-item-description" });
     });
 
     new Setting(body).setName(t.taskHead).setHeading();
@@ -496,7 +496,7 @@ export class NanalStampSettingTab extends PluginSettingTab {
         .setDesc(t.taskSysNotifyTestDesc)
         .addButton((b) =>
           b.setButtonText(t.taskSysNotifyTest).onClick(() => {
-            try { new Notification("nanalStamp", { body: t.taskSysNotifyTestSent }); } catch (_) { /* 무시 */ }
+            try { new Notification("nanalStamp", { body: t.taskSysNotifyTestSent }); } catch { /* 무시 */ }
             new Notice(t.taskSysNotifyTestSent);
           })
         );
@@ -629,7 +629,7 @@ export class NanalStampSettingTab extends PluginSettingTab {
               s.githubPat = v.trim();
               await this.plugin.saveSettings();
             });
-            (tx.inputEl as HTMLInputElement).type = "password";
+            (tx.inputEl).type = "password";
           });
       }
     }

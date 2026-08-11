@@ -94,8 +94,8 @@ export class SubmissionPackageModal extends NanalModal {
     contentEl.createEl("h2", { text: t.pkgSubTitle });
     contentEl.createEl("p", { text: t.pkgSubWhy });
     const box = contentEl.createDiv({ cls: "nanalstamp-pkg-preview" });
-    box.createEl("div", { text: t.pkgSubFreeHas, cls: "setting-item-name" });
-    box.createEl("div", { text: t.pkgSubFreeDesc, cls: "setting-item-description" });
+    box.createDiv({ text: t.pkgSubFreeHas, cls: "setting-item-name" });
+    box.createDiv({ text: t.pkgSubFreeDesc, cls: "setting-item-description" });
     contentEl.createEl("p", { text: t.pkgSubHow, cls: "setting-item-description" });
     new Setting(contentEl)
       .addButton((b) => b.setButtonText(t.pkgSubBuy).setCta().onClick(() => {
@@ -288,24 +288,24 @@ export class SubmissionPackageModal extends NanalModal {
   private renderPreview(box: HTMLElement, plan: PackagePlan) {
     box.empty();
     const bytes = plan.files.reduce((a, f) => a + f.data.length, 0);
-    box.createEl("div", { text: t.pkgIncluded(plan.files.length, fmtBytes(bytes)), cls: "setting-item-name" });
+    box.createDiv({ text: t.pkgIncluded(plan.files.length, fmtBytes(bytes)), cls: "setting-item-name" });
 
     if (plan.origins) {
       const o = plan.origins;
-      box.createEl("div", { text: t.pkgOriginBreak(o.device, o.storage), cls: "setting-item-description" });
-      if (plan.lost) box.createEl("div", { text: t.pkgOriginLost(plan.lost), cls: "nanalstamp-pkg-warn" });
+      box.createDiv({ text: t.pkgOriginBreak(o.device, o.storage), cls: "setting-item-description" });
+      if (plan.lost) box.createDiv({ text: t.pkgOriginLost(plan.lost), cls: "nanalstamp-pkg-warn" });
     }
 
     // 빠지는 것을 **반드시** 보여 준다. 이유가 다르면 사용자가 할 일도 다르다.
     if (plan.pending.length) {
-      box.createEl("div", { text: t.pkgExclPending(plan.pending.length), cls: "nanalstamp-pkg-warn" });
+      box.createDiv({ text: t.pkgExclPending(plan.pending.length), cls: "nanalstamp-pkg-warn" });
       this.fileList(box, plan.pending);
     }
     if (plan.unsealed.length) {
-      box.createEl("div", { text: t.pkgExclUnsealed(plan.unsealed.length), cls: "setting-item-description" });
+      box.createDiv({ text: t.pkgExclUnsealed(plan.unsealed.length), cls: "setting-item-description" });
       this.fileList(box, plan.unsealed);
     }
-    if (!plan.files.length) box.createEl("div", { text: t.pkgNothing, cls: "nanalstamp-pkg-warn" });
+    if (!plan.files.length) box.createDiv({ text: t.pkgNothing, cls: "nanalstamp-pkg-warn" });
 
     // ── 무엇을 담을지는 발급자가 고른다 ──────────────────────────────────
     // 증거를 전부 낼 의무는 없다. 다만 **낸 것이 전부인 척하면 안 된다** — 빼기로 한 것은
@@ -318,8 +318,8 @@ export class SubmissionPackageModal extends NanalModal {
     const gone = plan.files.filter((f) => !this.app.vault.getAbstractFileByPath(f.vaultPath));
     const wrap = box.createDiv({ cls: "nanalstamp-pkg-choices" });
     if (gone.length) {
-      wrap.createEl("div", { text: t.pkgPickTitle(gone.length), cls: "setting-item-name" });
-      wrap.createEl("div", { text: t.pkgPickDesc, cls: "setting-item-description" });
+      wrap.createDiv({ text: t.pkgPickTitle(gone.length), cls: "setting-item-name" });
+      wrap.createDiv({ text: t.pkgPickDesc, cls: "setting-item-description" });
       for (const f of gone.slice(0, 30)) {
         const row = wrap.createDiv({ cls: "nanalstamp-pkg-choice" });
         const cb = row.createEl("input", { type: "checkbox" });
@@ -328,11 +328,11 @@ export class SubmissionPackageModal extends NanalModal {
           if (cb.checked) this.exclude.delete(f.seq); else this.exclude.add(f.seq);
           this.plan = null;   // 다시 계획해야 처분내역이 맞는다
         };
-        row.createEl("span", { text: `${f.vaultPath}` });
+        row.createSpan({ text: `${f.vaultPath}` });
       }
-      if (gone.length > 30) wrap.createEl("div", { text: t.pkgMore(gone.length - 30), cls: "setting-item-description" });
+      if (gone.length > 30) wrap.createDiv({ text: t.pkgMore(gone.length - 30), cls: "setting-item-description" });
       if (this.exclude.size) {
-        wrap.createEl("div", { text: t.pkgPickExcluded(this.exclude.size), cls: "nanalstamp-pkg-warn" });
+        wrap.createDiv({ text: t.pkgPickExcluded(this.exclude.size), cls: "nanalstamp-pkg-warn" });
       }
     }
     // 변경 이력은 원문과 **따로** 고른다.

@@ -42,12 +42,12 @@ export class StorageRecoveryModal extends NanalModal {
 
     contentEl.createEl("p", { text: t.recWhy, cls: "setting-item-description" });
     const box = contentEl.createDiv({ cls: "nanalstamp-pkg-preview" });
-    box.createEl("div", { text: t.recStat(got.sealed, got.stored), cls: "setting-item-name" });
+    box.createDiv({ text: t.recStat(got.sealed, got.stored), cls: "setting-item-name" });
     if (got.total > 0) {
-      box.createEl("div", { text: t.recMissing(got.total), cls: "nanalstamp-pkg-warn" });
-      box.createEl("div", { text: t.recSource, cls: "setting-item-description" });
+      box.createDiv({ text: t.recMissing(got.total), cls: "nanalstamp-pkg-warn" });
+      box.createDiv({ text: t.recSource, cls: "setting-item-description" });
     } else {
-      box.createEl("div", { text: t.recAllStored, cls: "setting-item-description" });
+      box.createDiv({ text: t.recAllStored, cls: "setting-item-description" });
       return;
     }
 
@@ -93,8 +93,8 @@ export class StorageRecoveryModal extends NanalModal {
   private renderLost(el: HTMLElement, lost: LostItem[]) {
     el.empty();
     if (lost.length === 0) return;
-    el.createEl("div", { text: t.recLostHead(lost.length), cls: "nanalstamp-pkg-warn" });
-    el.createEl("div", { text: t.recLostWhy, cls: "setting-item-description" });
+    el.createDiv({ text: t.recLostHead(lost.length), cls: "nanalstamp-pkg-warn" });
+    el.createDiv({ text: t.recLostWhy, cls: "setting-item-description" });
     const list = el.createDiv({ cls: "nanalstamp-pkg-preview nanalstamp-rec-lost-list" });
     for (const it of lost) {
       const row = list.createDiv({ cls: "setting-item-description" });

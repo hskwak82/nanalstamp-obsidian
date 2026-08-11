@@ -101,6 +101,7 @@ export function unixMode(name: string): number {
 async function deflateRaw(data: Uint8Array): Promise<Uint8Array | null> {
   // globalThis 는 의도다(window 아님): 이 모듈은 플러그인·포털·node 테스트 세 런타임이 공유한다
   // — 서버 포털 번들(server/portal/packagecore.js)과 `node --test` 에는 window 가 없다.
+  // eslint-disable-next-line obsidianmd/no-global-this -- shared module also runs in Node tests/portal where window is absent
   const CS = (globalThis as { CompressionStream?: typeof CompressionStream }).CompressionStream;
   if (!CS || data.length === 0) return null;
   try {
@@ -448,7 +449,7 @@ export function coverageOf(anchors: AnchorInfo[]): number {
 ///
 /// 채우지 못한 자리는 남겨 두지 않는다 — `{{파일수}}` 가 그대로 보이면 미완성으로 읽힌다.
 export function fillReadme(html: string, v: Record<string, string>): string {
-  return html.replace(/\{\{([^}]+)\}\}/g, (_, k) => v[k.trim()] ?? "");
+  return html.replace(/\{\{([^}]+)\}\}/g, (_, k: string) => v[k.trim()] ?? "");
 }
 
 /// 안내문에 넣을 값. 요약이지 증거가 아니다 — 그 사실도 안내문이 스스로 밝힌다.

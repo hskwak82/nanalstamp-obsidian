@@ -8,7 +8,6 @@ import { nodeReq, errMsg, defaultArchivePathSafe, parseFolders, basenameOf } fro
 import { TASK_INBOX_VIEW_TYPE } from "./constants";
 import { GitHubConnectModal, OnboardingScopeModal } from "./modals";
 import { ConfirmModal } from "./modalbase";
-import type { HistSlot } from "./modals";
 import type { AttestSettings } from "./main";
 import type NanalStampPlugin from "./main";
 import { Platform } from "obsidian";

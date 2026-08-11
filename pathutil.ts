@@ -7,8 +7,10 @@ import { archiveDirNameForVault } from "./archivepath";
 // Node 모듈 최소 타입 — 이 플러그인이 실제 부르는 표면만 선언한다(@types/node 미사용).
 // 콜백형 멤버(readFile 등)는 isomorphic-git FsClient 구조 호환용으로만 존재한다.
 export interface NodeFs {
-  readFile: Function; writeFile: Function; unlink: Function; readdir: Function;
-  mkdir: Function; rmdir: Function; stat: Function; lstat: Function;
+  readFile: (...args: unknown[]) => unknown; writeFile: (...args: unknown[]) => unknown;
+  unlink: (...args: unknown[]) => unknown; readdir: (...args: unknown[]) => unknown;
+  mkdir: (...args: unknown[]) => unknown; rmdir: (...args: unknown[]) => unknown;
+  stat: (...args: unknown[]) => unknown; lstat: (...args: unknown[]) => unknown;
   existsSync(p: string): boolean;
   readFileSync(p: string, enc: "utf8"): string;
   readFileSync(p: string): Uint8Array;

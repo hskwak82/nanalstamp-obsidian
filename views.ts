@@ -897,7 +897,7 @@ export class DashboardView extends ItemView {
     kBlock.createDiv({ cls: "k", text: t.dashKpiLatestBlock });
     kBlock.createDiv({ cls: "v num", text: sync.latestBlock ? `#${sync.latestBlock}` : "—" });
 
-    const flatDays = heatWeeks.flat().filter((c) => !c.future);
+    const flatDays = ([] as (typeof heatWeeks)[number]).concat(...heatWeeks).filter((c) => !c.future);
     const sealedDays = flatDays.filter((c) => c.count > 0).length;
     const kSeal = kpis.createDiv({ cls: "nanalstamp-dash-kpi" });
     kSeal.createDiv({ cls: "k", text: t.dashKpiSealDays });
@@ -1110,8 +1110,8 @@ export class DashboardView extends ItemView {
   // GitHub 잔디 스타일: 열=달력 주, 상단 월 라벨, 좌측 월/수/금 라벨, 5단계 농도 + 범례.
   private renderHeatmapCard(grid: HTMLElement, heatWeeks: ReturnType<typeof heatmapCounts>): void {
     const c = this.card(grid, t.dashHeatmap, this.zoom === "heat" ? undefined : "span2", "heat");
-    const totalSeals = heatWeeks.flat().reduce((a, x) => a + x.count, 0);
-    const recentSeals = heatWeeks.slice(-12).flat().reduce((a, x) => a + x.count, 0);
+    const totalSeals = ([] as (typeof heatWeeks)[number]).concat(...heatWeeks).reduce((a, x) => a + x.count, 0);
+    const recentSeals = ([] as (typeof heatWeeks)[number]).concat(...heatWeeks.slice(-12)).reduce((a, x) => a + x.count, 0);
     const sub = c.createDiv({ cls: "nanalstamp-dash-mut" });
     sub.setText(t.dashHeatTotal(totalSeals, recentSeals));
     if (heatWeeks.length > 12 && this.zoom !== "heat") sub.setText(`${t.dashHeatTotal(totalSeals, recentSeals)} · ${t.dashHeatDragHint}`);

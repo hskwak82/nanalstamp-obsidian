@@ -18,7 +18,6 @@ export function pickLang(): Lang {
   const w = (typeof window !== "undefined" ? window : undefined) as unknown as
     { localStorage?: Storage; moment?: { locale?: () => string } } | undefined;
   const cands = [
-    // eslint-disable-next-line obsidianmd/prefer-get-language -- getLanguage() needs a newer minAppVersion; keep the documented fallback chain
     w?.localStorage?.getItem?.("language"),
     w?.moment?.locale?.(),
     typeof document !== "undefined" ? document.documentElement?.lang : undefined,

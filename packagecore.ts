@@ -99,10 +99,9 @@ export function unixMode(name: string): number {
 /// deflate-raw 로 줄여 본다. 줄지 않으면(이미 압축된 png·pdf) 저장 방식으로 둔다 —
 /// 압축이 커지는 경우가 실제로 있고, 그러면 파일만 키운다.
 async function deflateRaw(data: Uint8Array): Promise<Uint8Array | null> {
-  // globalThis 는 의도다(window 아님): 이 모듈은 플러그인·포털·node 테스트 세 런타임이 공유한다
-  // — 서버 포털 번들(server/portal/packagecore.js)과 `node --test` 에는 window 가 없다.
-  // eslint-disable-next-line obsidianmd/no-global-this -- shared module also runs in Node tests/portal where window is absent
-  const CS = (globalThis as { CompressionStream?: typeof CompressionStream }).CompressionStream;
+  // typeof 가드는 의도다(window 참조 아님): 이 모듈은 플러그인·포털·node 테스트 세 런타임이
+  // 공유한다 — 서버 포털 번들(server/portal/packagecore.js)과 `node --test` 에는 window 가 없다.
+  const CS = typeof CompressionStream !== "undefined" ? CompressionStream : undefined;
   if (!CS || data.length === 0) return null;
   try {
     const cs = new CS("deflate-raw");

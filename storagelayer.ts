@@ -100,7 +100,7 @@ export abstract class StorageLayer extends NanalStampBase {
     const h = nodeReq("crypto").createHash("sha256");
     const fd = fs.openSync(abs, "r");
     try {
-      const buf = Buffer.allocUnsafe(1 << 20);
+      const buf = new Uint8Array(1 << 20);
       let pos = 0, since = 0;
       for (;;) {
         const n = fs.readSync(fd, buf, 0, buf.length, pos);
@@ -547,7 +547,7 @@ export abstract class StorageLayer extends NanalStampBase {
     const plan: Array<{ hash: string; size: number; off: number }> = [];
     const fd = fs.openSync(abs, "r");
     try {
-      const buf = Buffer.allocUnsafe(CHUNK_MAX);
+      const buf = new Uint8Array(CHUNK_MAX);
       let filled = 0, pos = 0, off = 0;
       for (;;) {
         // nextCut 의 계약: CHUNK_MAX 까지 채우거나 파일 끝이어야 한다.
@@ -574,7 +574,7 @@ export abstract class StorageLayer extends NanalStampBase {
     const fs = nodeReq("fs");
     const fd = fs.openSync(abs, "r");
     try {
-      const b = Buffer.allocUnsafe(len);
+      const b = new Uint8Array(len);
       let got = 0;
       while (got < len) {
         const n = fs.readSync(fd, b, got, len - got, off + got);

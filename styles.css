@@ -227,7 +227,7 @@
 }
 .nanalstamp-tip.is-shown { display: block; }
 .nanalstamp-dash-funnel .fk.is-click { cursor: pointer; }
-.nanalstamp-dash-funnel .fk.is-click:hover { text-decoration-line: underline; text-decoration-style: dotted; color: var(--text-normal); }
+.nanalstamp-dash-funnel .fk.is-click:hover { border-bottom: 1px dotted currentColor; color: var(--text-normal); }
 .nanalstamp-dash-funnel .fden { color: var(--text-faint); font-size: 0.85em; font-weight: 400; }
 .nanalstamp-dash-funnel .fextra { color: var(--text-faint); font-size: 0.82em; }
 .nanalstamp-dash-funnel .flife { margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--ns-track); color: var(--text-muted); font-size: 0.82em; }

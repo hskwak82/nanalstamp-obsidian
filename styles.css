@@ -21,6 +21,17 @@
 /* 카드 안 Setting 행 — 답답하지 않게: 구분선 제거, 여백만으로 분리 */
 .nanalstamp-settings .nanalstamp-card .setting-item { border: none; padding: 10px 0 4px; }
 
+/* 설정탭 스택 행 — 컨트롤(입력+버튼)이 넓어 라벨 컬럼이 짓눌리는 행은 위(라벨 전폭)-아래(컨트롤)로
+   쌓는다. 모달의 nanalstamp-m-stack 과 같은 취지(그쪽은 .nanalstamp-modal-container 스코프라 재사용
+   불가). **행마다 붙여서** 쓴다 — 카드 통째로 걸면 짧은 행까지 2단을 잃는다
+   (2026-08-09 실기기 발견: 로그인 행·팀 계정 행이 라벨 1글자 폭으로 붕괴). */
+.nanalstamp-settings .setting-item.nanalstamp-stack { flex-direction: column; align-items: stretch; }
+.nanalstamp-settings .setting-item.nanalstamp-stack .setting-item-info { margin-right: 0; margin-bottom: 8px; }
+.nanalstamp-settings .setting-item.nanalstamp-stack .setting-item-control { justify-content: flex-start; flex-wrap: wrap; }
+/* 스택 행에서는 라벨이 위로 갔으므로 입력칸이 전폭을 나눠 갖는다 — 기본 고정폭이면 오른쪽이 빈다(2026-08-09 사용자).
+   버튼에는 걸지 않는다: 자연 폭을 유지해야 글자 길이대로 읽힌다. 폭이 모자라면 wrap 이 버튼을 아랫줄로 내린다. */
+.nanalstamp-settings .setting-item.nanalstamp-stack .setting-item-control input { flex: 1 1 160px; min-width: 140px; }
+
 /* 티어 배지 — pill(액센트 기반, Pro만 강조) */
 .nanalstamp-settings .nanalstamp-tier-badge {
   display: inline-flex;
@@ -208,12 +219,13 @@
 .nanalstamp-dash-info { color: var(--text-faint); font-size: 0.85em; }
 /* 자체 즉시 툴팁 — Obsidian 툴팁 시각 언어 준수, \n은 정의된 그대로(pre-line) */
 .nanalstamp-tip {
-  position: fixed; z-index: 9999; display: none;
+  position: fixed; z-index: 9999; display: none;   /* 표시는 .is-shown 이 연다(2026-08-11) */
   background: var(--background-modifier-message, #1f1f1f); color: #fff;
   padding: 6px 10px; border-radius: 6px; font-size: 12.5px; line-height: 1.5;
   white-space: pre-line; max-width: 340px; pointer-events: none;
   box-shadow: 0 4px 14px rgba(0,0,0,0.35);
 }
+.nanalstamp-tip.is-shown { display: block; }
 .nanalstamp-dash-funnel .fk.is-click { cursor: pointer; }
 .nanalstamp-dash-funnel .fk.is-click:hover { text-decoration: underline dotted; color: var(--text-normal); }
 .nanalstamp-dash-funnel .fden { color: var(--text-faint); font-size: 0.85em; font-weight: 400; }
@@ -1053,3 +1065,135 @@ body.nanalstamp-col-resizing, body.nanalstamp-col-resizing * { cursor: col-resiz
 /* 브랜드 씰 아이콘 — insertAdjacentHTML 제거(스토어 가이드) 후 createEl+클래스로 */
 .nanalstamp-ribbon-icon { display: block; }
 .nanalstamp-status-seal { display: inline-block; vertical-align: middle; }
+
+/* ── 심사 대응: 인라인 스타일 → 클래스(2026-08-11, obsidianmd/no-static-styles-assignment) ──
+   렌더 결과가 종전과 픽셀 단위로 같아야 한다 — 값은 옮기기만 하고 바꾸지 않았다. */
+
+/* 봉인 성공 Notice 의 씰 아이콘(main.ts sealNotice) */
+.nanalstamp-notice-seal { vertical-align: text-bottom; margin-right: 4px; }
+
+/* 되살릴 수 없는 목록 — 길어지면 스크롤(recoverymodal) */
+.nanalstamp-rec-lost-list { max-height: 220px; overflow-y: auto; }
+
+/* 설정탭 상단 경고 배너(모바일 미구독·키 거부) */
+.nanalstamp-banner-warn {
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  background: var(--background-modifier-error-hover);
+}
+
+/* 봉인 범위 변경 이력 표(설정탭 고급) */
+.nanalstamp-hist-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+.nanalstamp-hist-table th {
+  text-align: left;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  font-weight: 600;
+}
+.nanalstamp-hist-table td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  vertical-align: top;
+}
+.nanalstamp-hist-open { cursor: pointer; font-size: 11px; }
+
+/* 원문 JSON 보기(모달 pre) */
+.nanalstamp-doc-pre { white-space: pre-wrap; font-size: 11.5px; max-height: 60vh; overflow: auto; }
+
+/* 설명 아래 덧붙는 문단 */
+.nanalstamp-desc-extra { margin-top: 6px; }
+
+/* 업무 모달 — 제목·메모 입력은 행 전폭 */
+.nanalstamp-input-full { width: 100%; }
+
+/* 업무함 표 — 정렬 가능한 헤더(클릭 어포던스) */
+.nanalstamp-tv-table th.is-sortable { cursor: pointer; }
+
+/* 업무함 필터 팝오버 — 종전에는 생성 시점 인라인이었다(2026-08-11 클래스로 이동, 값 동일).
+   ring(1px)이 배경색과 무관하게 경계를 그려 순검정 AMOLED 테마에서도 떠 보인다 + 큰 blur는 일반 테마용.
+   위치(left·top)만 계산값이라 코드에 남는다. */
+.nanalstamp-tv-pop {
+  position: fixed;
+  z-index: 1000;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border-hover);
+  border-radius: 6px;
+  padding: 8px;
+  box-shadow: 0 0 0 1px var(--background-modifier-border-hover), 0 10px 30px rgba(0, 0, 0, 0.55);
+  min-width: 180px;
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* 노트 브라우저(모바일 열람) — 종전 인라인 값을 그대로 옮겼다(2026-08-11 심사 대응) */
+.nanal-browser-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.nanal-browser-controls { display: flex; align-items: center; gap: 6px; }
+.nanal-browser-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+.nanal-browser-row.is-clickable { cursor: pointer; }
+.nanal-browser-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nanal-browser-label.is-unnamed { opacity: 0.6; }
+.nanal-browser-folder { opacity: 0.55; }
+.nanal-browser-when { font-size: 0.85em; opacity: 0.7; }
+.nanal-browser-status { font-size: 0.85em; }
+.nanal-browser-hist { font-size: 0.8em; padding: 1px 8px; }
+.nanal-browser-more { margin-top: 8px; }
+
+/* 대시보드 — 클릭 가능한 대기 칩 */
+.nanalstamp-dash-chip.is-clickable { cursor: pointer; }
+
+/* 모달 공통 — 종전 인라인 값을 그대로 옮겼다(2026-08-11 심사 대응) */
+.nanalstamp-restore-line.is-error { color: var(--text-error); }
+
+/* 키·값 박스(일괄 복원 대상 요약) */
+.nanalstamp-kv-box {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 10px 0;
+  font-size: 13px;
+}
+.nanalstamp-kv-row { display: flex; gap: 10px; padding: 2px 0; }
+.nanalstamp-kv-key { min-width: 120px; color: var(--text-muted); }
+
+/* 보관 대기 목록 */
+.nanalstamp-pend-list { max-height: 340px; overflow-y: auto; margin: 8px 0; }
+.nanalstamp-pend-item {
+  padding: 4px 2px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  font-size: 0.9em;
+}
+.nanalstamp-pend-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nanalstamp-pend-why { font-size: 0.85em; color: var(--text-muted); margin-top: 1px; }
+
+/* 봉인 버전 이력 행 */
+.nanalstamp-hist-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  cursor: pointer;
+}
+.nanalstamp-hist-seq { font-size: 0.85em; opacity: 0.6; }
+.nanalstamp-hist-status { font-size: 0.85em; margin-left: auto; }
+
+/* GitHub 기기 인증 코드 — 크게·읽기 쉽게·통째 선택 */
+.nanalstamp-gh-code {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 2.2rem;
+  font-weight: 700;
+  letter-spacing: 0.25em;
+  text-align: center;
+  margin: 0.4rem 0 1.1rem;
+  user-select: all;
+}

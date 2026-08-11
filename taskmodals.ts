@@ -5,7 +5,7 @@
 // 값 순환 참조 회피: main.ts의 값은 하나도 참조하지 않는다(t는 i18n, 날짜는 fmtutil,
 // 나머지는 taskcore·obsidian). NanalStampPlugin은 생성자 인자 타입일 뿐이라
 // import type으로만 받는다 — 타입 참조는 빌드 시 소거되므로 순환이 생기지 않는다.
-import { App, FuzzySuggestModal, Modal, Notice, Setting, TFile, TFolder } from "obsidian";
+import { App, FuzzySuggestModal, Notice, Setting, TFile } from "obsidian";
 import { NanalModal } from "./modalbase";
 import { isMarkdownPath } from "./sealscope";
 import type { TaskItem, TaskReply, RosterMember, FolderRename, FanoutOutcome, FolderStatus, FolderTarget } from "./taskcore";
@@ -37,7 +37,7 @@ export class TaskComposeModal extends NanalModal {
     new Setting(contentEl).setName(t.taskFieldTitle).addText((tx) => {
       tx.setPlaceholder(t.taskTitlePlaceholder);
       tx.onChange((v) => (this.title = v));
-      tx.inputEl.style.width = "100%";
+      tx.inputEl.addClass("nanalstamp-input-full");
     });
     new Setting(contentEl).setName(t.taskFieldBody).addTextArea((ta) => ta.onChange((v) => (this.body = v)));
     // §3 연구과제 — 캐시 즉시 채움 + 갱신 후 신규분 추가(roster 지연 로드 관례).
@@ -74,7 +74,7 @@ export class TaskComposeModal extends NanalModal {
     new Setting(contentEl).setName(t.taskFieldMemo).addText((tx) => {
       tx.setPlaceholder(t.taskMemoPlaceholder);
       tx.onChange((v) => (this.memo = v));
-      tx.inputEl.style.width = "100%";
+      tx.inputEl.addClass("nanalstamp-input-full");
     });
     // 수신자 — 체크박스 다중 선택(멤버 ≤10 가정, §fan-out). roster 지연 로드(실패 시 목록이
     // 비어 있어도 personal 생성은 항상 가능 = 오프라인/비팀 안전). setDesc는 "체크 안 하면
@@ -401,8 +401,8 @@ export class TaskDetailModal extends NanalModal {
       // 서버는 본문을 파싱하지 않는다: 고른 uid를 함께 보내야 알림이 간다. 그래서 그냥 타이핑한
       // `@홍길동`은 알림이 가지 않고, 목록에서 고른 것만 간다 — 규칙이 예측 가능해야 한다.
       const picker = form.createDiv({ cls: "nanalstamp-td-mention" });
-      picker.style.display = "none";
-      const closePicker = () => { picker.style.display = "none"; picker.empty(); };
+      picker.hide();
+      const closePicker = () => { picker.hide(); picker.empty(); };
       const openPicker = (frag: string) => {
         const q = frag.toLowerCase();
         const hits = this.roster.filter((m) => rosterLabel(m).toLowerCase().includes(q)).slice(0, 6);
@@ -423,7 +423,7 @@ export class TaskDetailModal extends NanalModal {
             ta.focus();
           });
         }
-        picker.style.display = "";
+        picker.show();
       };
       ta.addEventListener("input", (e) => {
         const el = e.target as HTMLTextAreaElement;
@@ -485,7 +485,7 @@ export class TaskDetailModal extends NanalModal {
     if (this.stickToBottom) {
       this.stickToBottom = false;
       // 레이아웃이 끝난 프레임에 — 같은 tick 에는 scrollHeight 가 아직 확정되지 않는다.
-      requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
         const sc = this.contentEl.querySelector<HTMLElement>(".nanalstamp-td-scroll");
         if (sc) sc.scrollTop = sc.scrollHeight;
       });
@@ -872,7 +872,7 @@ export class TaskEditModal extends NanalModal {
       tx.setPlaceholder(t.taskMemoPlaceholder);
       tx.setValue(this.memo);
       tx.onChange((v) => (this.memo = v));
-      tx.inputEl.style.width = "100%";
+      tx.inputEl.addClass("nanalstamp-input-full");
     });
 
     // 담당자 변경 — 팀 업무(담당자가 있는 것)에서만. 개인 업무엔 담당 개념이 없다.

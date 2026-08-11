@@ -121,3 +121,15 @@ export function apiKeyForPure(team: boolean, soloKey: string, teamKey: string): 
   const tk = (teamKey || "").trim();
   return team && tk ? tk : soloKey;
 }
+
+/// `apiKeyForPure` 와 **짝**이다 — 그 함수가 팀 키를 고르는 입력에서는 이 함수도 팀 플래그를
+/// 봐야 한다. 트림 규칙까지 같아야 하는 것이 핵심이다: 공백뿐인 팀 키는 키 선택에서 개인 키로
+/// 떨어지므로, 거부 판정도 개인 플래그를 봐야 한다. 둘이 어긋나면 **멀쩡한 키로 보내면서 다른
+/// 키의 거부 상태를 보고 멈추거나**(또는 그 반대로 거부된 키로 계속 밀거나) 한다.
+/// 짝이 유지되는지는 sealscope.test.ts 가 두 함수를 같은 입력으로 돌려 고정한다.
+export function authFailedForPure(
+  team: boolean, teamKey: string, soloFailed: boolean, teamFailed: boolean,
+): boolean {
+  const tk = (teamKey || "").trim();
+  return team && tk ? teamFailed : soloFailed;
+}

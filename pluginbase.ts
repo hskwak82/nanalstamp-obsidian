@@ -6,7 +6,9 @@
 //
 // 이 파일이 갖는 것: (1) 하위 계층이 공유하는 상태 (2) 하위 계층이 위(최종 클래스)를 부를 때
 // 필요한 `abstract` 선언. 가시성은 원래 것을 그대로 유지한다(외부에서 쓰는 것은 public).
-import { Plugin, TFile, RequestUrlResponse } from "obsidian";
+import { Notice, Plugin, TFile, RequestUrlResponse } from "obsidian";
+import { t } from "./i18n";
+import { authFailedForPure } from "./sealscope";
 import type { AttestSettings } from "./main";
 
 export abstract class NanalStampBase extends Plugin {
@@ -14,6 +16,33 @@ export abstract class NanalStampBase extends Plugin {
   /// 401/403 → 키 교체 전까지 봉인·전송 중단. 여러 계층이 이 값을 게이트로 쓰므로
   /// 최종 클래스가 아니라 기반에 둔다(하위 계층이 자식 필드를 볼 수는 없다).
   authFailed = false;
+  teamAuthFailed = false; // 팀 키(teamApiKey) 거부 — 개인 키 거부(authFailed)와 분리(P-03).
+  /// 이 경로의 봉인에 쓸 키가 거부 상태인가. **키를 고르는 규칙(apiKeyForPure)과 짝인 순수
+  /// 함수**를 경유한다 — 판정을 여기서 다시 적으면 트림 같은 세부에서 둘이 갈린다.
+  authFailedFor(team: boolean): boolean {
+    return authFailedForPure(team, this.settings.teamApiKey, this.authFailed, this.teamAuthFailed);
+  }
+  authFailedAny(): boolean {
+    return this.authFailed || this.teamKeyRejected();
+  }
+  /// 상태바가 "팀 키 거부됨"을 표시하는 조건. 표시·클릭·설정 안내가 같은 판정을 써야 한다 —
+  /// 셋이 제각각이면 배지는 떠 있는데 클릭은 다른 곳으로 가는 어긋남이 생긴다(P-02·P-07).
+  /// "팀 키를 쓰는 경로였다면 거부인가" 이므로 개인 플래그는 false 로 두고 묻는다.
+  teamKeyRejected(): boolean {
+    return authFailedForPure(true, this.settings.teamApiKey, false, this.teamAuthFailed);
+  }
+  /// 키 거부를 **한 곳에서** 세운다. 세우는 자리가 흩어지면 어느 하나가 분기 규칙을 달리 쓰거나
+  /// 상태바 갱신을 빠뜨리고, 동시에 나간 요청들이 같은 Notice 를 여러 번 띄운다.
+  /// 이미 선 플래그는 다시 세우지 않는다 — 그래서 Notice 는 계정당 1회다(P-03).
+  markAuthFailed(team: boolean): void {
+    // "이 요청이 쓴 키가 팀 키인가" — 짝 함수에 물어 트림 규칙까지 키 선택과 같게 맞춘다
+    // (팀=true·개인=false 를 답으로 넣어 되돌려 받는다).
+    const isTeam = authFailedForPure(team, this.settings.teamApiKey, false, true);
+    if (isTeam ? this.teamAuthFailed : this.authFailed) return;
+    if (isTeam) this.teamAuthFailed = true; else this.authFailed = true;
+    new Notice(isTeam ? t.teamAuthFail : t.authFail);
+    void this.updateActiveStatus();
+  }
   nanalUploading = new Set<string>(); // v2a: 같은 파일의 청크 업로드가 재시도 인터벌과 겹치지 않게
   storageQuotaBackoffUntil = 0; // C1: 402(쿼터 초과) 후 1시간 presign 중단 — 30초 재시도 루프의 무의미한 402 방지
   dekCache = new Map<string, Promise<string | null>>(); // Phase D: "user" | "team" → DEK 조회 Promise(in-flight 공유 — 콜드 캐시 병렬 GET 중복 방지, 세션 메모리만·디스크 비저장)
@@ -37,6 +66,8 @@ export abstract class NanalStampBase extends Plugin {
   protected abstract keyFor(team: boolean): string;
   /// 해시만 알고 경로를 모르는 요청은 양쪽 계정에 물어본다(팀 → 개인).
   protected abstract askBothAccounts<T>(run: (key: string) => Promise<T | null>): Promise<T | null>;
+  /// 상태바 재판정. 키 거부처럼 **하위 계층에서 일어난 일**이 상태바에 바로 반영돼야 한다.
+  abstract updateActiveStatus(): Promise<void>;
   protected abstract isBinary(file: TFile): boolean;
   protected abstract overUploadLimit(file: TFile): boolean;
   protected abstract maybeNoticeLargeUpload(file: TFile): void;

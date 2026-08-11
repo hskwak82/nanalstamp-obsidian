@@ -1,7 +1,7 @@
 // sealscope 순수 판정 로직 테스트 — 실행: npm test (esbuild 번들 → node --test)
 import { test } from "node:test";
 import assert from "node:assert";
-import { isSealableFile, isOverSizeLimit, isMarkdownPath, inSealScopePure, isRestoredCopy, RESTORED_PREFIXES, inFolderScopePure, scopeUnset, isKitSample, teamBlobScopePure, inTeamRootPure, apiKeyForPure } from "./sealscope";
+import { isSealableFile, isOverSizeLimit, isMarkdownPath, inSealScopePure, isRestoredCopy, RESTORED_PREFIXES, inFolderScopePure, scopeUnset, isKitSample, teamBlobScopePure, inTeamRootPure, apiKeyForPure, authFailedForPure } from "./sealscope";
 import { restoredPath } from "./storagecore";
 
 test("isRestoredCopy: 두 복원 접두(restored-vault/·restored/) 아래는 전부 복원 사본", () => {
@@ -199,4 +199,25 @@ test("apiKeyForPure: 팀 키가 없으면 개인 키가 양쪽에 쓰인다", ()
   // 계정을 나눠 쓰는 사람 — 팀 폴더만 회사 계정으로.
   assert.equal(apiKeyForPure(true, "solo", "team"), "team");
   assert.equal(apiKeyForPure(false, "solo", "team"), "solo", "개인 폴더는 절대 팀 계정으로 가지 않는다");
+});
+
+// 키를 고르는 규칙과 거부를 보는 규칙은 **짝**이다. 어긋나면 멀쩡한 키로 보내면서 다른 키의
+// 거부 상태를 보고 멈추거나(또는 거부된 키로 계속 밀거나) 한다 — 공백뿐인 팀 키가 그 경계였다.
+test("authFailedForPure: apiKeyForPure가 팀 키를 고르는 모든 입력에서 팀 플래그를 본다", () => {
+  const solo = "nsk_solo";
+  const teamKeys = ["nsk_team", "", "   ", "\t\n", " nsk_team "];
+  for (const tk of teamKeys) {
+    for (const team of [true, false]) {
+      const usesTeamKey = apiKeyForPure(team, solo, tk) !== solo;
+      // 개인=거부 / 팀=정상 으로 두면, 반환값이 곧 "개인 플래그를 봤는가"다.
+      const looksAtSoloFlag = authFailedForPure(team, tk, true, false);
+      assert.strictEqual(looksAtSoloFlag, !usesTeamKey,
+        `team=${team} teamKey=${JSON.stringify(tk)} — 키 선택과 거부 판정이 어긋났다`);
+      // 반대 방향도 같이 고정한다(팀 플래그를 보는지).
+      assert.strictEqual(authFailedForPure(team, tk, false, true), usesTeamKey);
+    }
+  }
+  // 공백뿐인 팀 키: 키는 개인 것을 쓰므로 팀이 거부돼도 봉인은 멈추지 않아야 한다.
+  assert.strictEqual(apiKeyForPure(true, solo, "   "), solo);
+  assert.strictEqual(authFailedForPure(true, "   ", false, true), false);
 });

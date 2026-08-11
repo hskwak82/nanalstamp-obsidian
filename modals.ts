@@ -3,15 +3,15 @@
 // 뷰 타입 문자열을 constants.ts에서 받는 이유: 여기서 views.ts를 참조하면
 // views → modals와 맞물려 값 순환이 된다.
 
-import { App, ButtonComponent, FuzzySuggestModal, MarkdownRenderer, Modal, Notice, Platform, Setting, TFile, TFolder, requestUrl, setIcon } from "obsidian";
+import { App, FuzzySuggestModal, Notice, Platform, Setting, TFile, requestUrl } from "obsidian";
 import { NanalModal } from "./modalbase";
 import { t, reviewVerdictLabel } from "./i18n";
 import { fmtDate, fmtDateTime, fmtUtc } from "./fmtutil";
 import { nodeReq, sha256Hex, sha256HexBytes, basenameOf, safeName, defaultArchivePathSafe } from "./pathutil";
-import { ARCHIVE_SOURCE_VIEW_TYPE, NOTE_BROWSER_VIEW_TYPE, TASK_INBOX_VIEW_TYPE, GITHUB_OAUTH_CLIENT_ID, GITHUB_DEFAULT_REPO } from "./constants";
+import { GITHUB_OAUTH_CLIENT_ID, GITHUB_DEFAULT_REPO } from "./constants";
 import type NanalStampPlugin from "./main";
 import { isMarkdownPath } from "./sealscope";
-import { blobExt, blobContentType, fmtBytes } from "./storagecore";
+import { blobExt, fmtBytes } from "./storagecore";
 import type { RewindEntry } from "./rewindcore";
 import type { HistRow } from "./notebrowsercore";
 
@@ -433,12 +433,10 @@ export class AccountResumeModal extends NanalModal {
     contentEl.createEl("p", { text: t.acctResumeDesc });
 
     // 무엇을 되살리는지 그대로 보여준다 — 고르기 전에 알아야 한다.
-    const box = contentEl.createDiv();
-    box.style.cssText = "border:1px solid var(--background-modifier-border);border-radius:8px;padding:10px 12px;margin:10px 0;font-size:13px";
+    const box = contentEl.createDiv({ cls: "nanalstamp-kv-box" });
     const row = (k: string, v: string) => {
-      const d = box.createDiv();
-      d.style.cssText = "display:flex;gap:10px;padding:2px 0";
-      const a = d.createSpan({ text: k }); a.style.cssText = "min-width:120px;color:var(--text-muted)";
+      const d = box.createDiv({ cls: "nanalstamp-kv-row" });
+      d.createSpan({ text: k, cls: "nanalstamp-kv-key" });
       d.createSpan({ text: v });
     };
     if (p.email) row(t.acctResumeAccount, p.email);
@@ -699,25 +697,20 @@ export class StoragePendingModal extends NanalModal {
     c.createEl("h2", { text: t.pendModalTitle(this.axis) });
     const reason = this.plugin.storagePendingReason();
     if (reason) {
-      const r = c.createEl("p", { text: reason, cls: "nanalstamp-restore-line" });
-      r.style.color = "var(--text-error)";
+      c.createEl("p", { text: reason, cls: "nanalstamp-restore-line is-error" });
     }
     if (this.paths.length === 0) {
       c.createEl("p", { text: t.pendListEmpty, cls: "nanalstamp-archive-note" });
     } else {
-      const list = c.createDiv();
-      list.style.cssText = "max-height:340px;overflow-y:auto;margin:8px 0;";
+      const list = c.createDiv({ cls: "nanalstamp-pend-list" });
       for (const pth of this.paths.slice(0, 300)) {
-        const it = list.createDiv();
-        it.style.cssText = "padding:4px 2px;border-bottom:1px solid var(--background-modifier-border);font-size:0.9em;";
-        const nameEl = it.createDiv({ text: pth });
-        nameEl.style.cssText = "overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+        const it = list.createDiv({ cls: "nanalstamp-pend-item" });
+        it.createDiv({ text: pth, cls: "nanalstamp-pend-name" });
         // **왜** 안 올라갔는지 함께 적는다. 경로만 보이면 "재시도" 말고 할 수 있는 일이 없다 —
         // 용량 초과인지, 봉인 뒤 파일이 바뀐 것인지에 따라 사용자가 할 일이 다르다(2026-08-01).
         const st = (this.plugin.settings.uploadStall || {})[pth];
         if (st && st.why) {
-          const w = it.createDiv({ text: st.why });
-          w.style.cssText = "font-size:0.85em;color:var(--text-muted);margin-top:1px;";
+          it.createDiv({ text: st.why, cls: "nanalstamp-pend-why" });
         }
       }
       if (this.paths.length > 300) c.createEl("p", { text: t.dashMore(this.paths.length - 300), cls: "nanalstamp-archive-note" });
@@ -786,10 +779,8 @@ export class RestoreVaultModal extends NanalModal {
           } else {
             // 소진 — 두 줄로(고정폭 모달에서 중간 줄바꿈 방지): 한도 상태 / 구매 안내
             const next = typeof r.json.next_free_at === "number" ? fmtDate(new Date(r.json.next_free_at * 1000)) : "?";
-            const l1 = quotaBox.createEl("p", { text: t.restoreVaultLimit(next), cls: "nanalstamp-restore-line" });
-            l1.style.color = "var(--text-error)";
-            const l2 = quotaBox.createEl("p", { text: t.restoreBuySoon, cls: "nanalstamp-restore-line" });
-            l2.style.color = "var(--text-error)";
+            quotaBox.createEl("p", { text: t.restoreVaultLimit(next), cls: "nanalstamp-restore-line is-error" });
+            quotaBox.createEl("p", { text: t.restoreBuySoon, cls: "nanalstamp-restore-line is-error" });
           }
         }
       } catch { /* 생략 */ }
@@ -875,21 +866,17 @@ export class NanalHistoryModal extends NanalModal {
     if (!this.rows.length) { c.createEl("p", { text: t.browserHistoryEmpty }); return; }
     const list = c.createDiv();
     for (const v of this.rows) {
-      const item = list.createDiv();
-      item.style.cssText = "display:flex;align-items:baseline;gap:10px;padding:6px 4px;border-bottom:1px solid var(--background-modifier-border);cursor:pointer;";
+      const item = list.createDiv({ cls: "nanalstamp-hist-row" });
       item.createSpan({ text: fmtDateTime(new Date(v.receivedAt * 1000)) });
-      const seq = item.createSpan({ text: `seq #${v.seq}` });
-      seq.style.cssText = "font-size:0.85em;opacity:0.6;";
-      const status = item.createSpan({ text: v.block != null ? `₿ ${v.block}` : "…" });
-      status.style.cssText = "font-size:0.85em;margin-left:auto;";
+      item.createSpan({ text: `seq #${v.seq}`, cls: "nanalstamp-hist-seq" });
+      item.createSpan({ text: v.block != null ? `₿ ${v.block}` : "…", cls: "nanalstamp-hist-status" });
       item.addEventListener("click", () => {
         this.close();
         void this.plugin.openNanalView(this.notePath, v.fileHash, this.isMd, v.receivedAt);
       });
     }
     if (this.hasMore) {
-      const more = c.createEl("button", { text: t.browserMore });
-      more.style.marginTop = "8px";
+      const more = c.createEl("button", { text: t.browserMore, cls: "nanal-browser-more" });
       more.addEventListener("click", () => void this.loadPage());
     }
   }
@@ -998,14 +985,7 @@ export class GitHubConnectModal extends NanalModal {
     contentEl.createEl("h2", { text: t.ghModalTitle });
     // ① 코드(모노스페이스, 크게) + 자동 클립보드 복사(실패 무시)
     contentEl.createEl("p", { text: t.ghStep1, cls: "setting-item-name" });
-    const code = contentEl.createEl("div", { text: userCode });
-    code.style.fontFamily = "ui-monospace, Menlo, monospace";
-    code.style.fontSize = "2.2rem";
-    code.style.fontWeight = "700";
-    code.style.letterSpacing = "0.25em";
-    code.style.textAlign = "center";
-    code.style.margin = "0.4rem 0 1.1rem";
-    code.style.userSelect = "all";
+    contentEl.createEl("div", { text: userCode, cls: "nanalstamp-gh-code" });
     try { void navigator.clipboard.writeText(userCode); } catch (_) { /* ignore */ }
     // ② GitHub 열기
     new Setting(contentEl)

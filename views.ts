@@ -1,19 +1,19 @@
 // views.ts — 워크스페이스 ItemView 4종(원문 열람·노트 브라우저·대시보드·업무함).
 // main.ts에서 순수 이동(2026-07-26). 모달을 부르지만 반대는 없다(단방향).
 
-import { App, ItemView, MarkdownRenderer, Menu, Notice, Platform, TFile, ViewStateResult, WorkspaceLeaf, setIcon, setTooltip } from "obsidian";
+import { ItemView, MarkdownRenderer, Notice, Platform, TFile, ViewStateResult, WorkspaceLeaf, setIcon } from "obsidian";
 import { t } from "./i18n";
 import { pad2, fmtDate, fmtDateTime } from "./fmtutil";
 import { sha256Hex, sha256HexBytes, basenameOf, extOf, isExcalidrawNote, splitExcalidrawName } from "./pathutil";
-import { ICON_ID, ARCHIVE_SOURCE_VIEW_TYPE, NOTE_BROWSER_VIEW_TYPE, DASHBOARD_VIEW_TYPE, DASH_HASH_CAP, DASH_GAP_ROWS, DASH_TL_ROWS, TASK_INBOX_VIEW_TYPE, TASK_POLL_MS, TASK_SSE_RETRY_MIN_MS, TASK_SSE_RETRY_MAX_MS } from "./constants";
-import { ArchiveVersionModal, NanalHistoryModal, RenameLinkSuggestModal, RestoreConfirmModal, RestoreVaultModal, StoragePendingModal } from "./modals";
+import { ICON_ID, ARCHIVE_SOURCE_VIEW_TYPE, NOTE_BROWSER_VIEW_TYPE, DASHBOARD_VIEW_TYPE, DASH_HASH_CAP, DASH_GAP_ROWS, DASH_TL_ROWS, TASK_INBOX_VIEW_TYPE } from "./constants";
+import { NanalHistoryModal, RenameLinkSuggestModal, RestoreConfirmModal, RestoreVaultModal, StoragePendingModal } from "./modals";
 import type NanalStampPlugin from "./main";
 import { Setting } from "obsidian";
-import { blobExt, blobContentType, fmtBytes } from "./storagecore";
+import { blobExt, blobContentType } from "./storagecore";
 import { isMarkdownPath } from "./sealscope";
 import type { RewindEntry } from "./rewindcore";
 import { rowDisplay } from "./notebrowsercore";
-import type { HistRow, NoteRow, VaultRow } from "./notebrowsercore";
+import type { NoteRow, VaultRow } from "./notebrowsercore";
 import { ArchiveEntry, coverage, gaps, timeline, heatmapCounts, syncStatus, certCandidates, Gap } from "./dashcore";
 import { deletedEntries } from "./rewindcore";
 import { unifyTasks, unionTasks, tasksRenderKey, isOverdue, isUnread, dueKind, personDisplay, taskActionDefs } from "./taskcore";
@@ -446,11 +446,9 @@ export class NoteBrowserView extends ItemView {
     const c = this.contentEl;
     c.empty();
     // 헤더: 제목 + vault 필터 + 새로고침(목록 리셋 후 1페이지부터 재조회)
-    const head = c.createDiv();
-    head.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:8px;";
+    const head = c.createDiv({ cls: "nanal-browser-head" });
     head.createEl("h3", { text: t.browserTitle });
-    const controls = head.createDiv();
-    controls.style.cssText = "display:flex;align-items:center;gap:6px;";
+    const controls = head.createDiv({ cls: "nanal-browser-controls" });
     if (this.vaults.length > 0) { // vault가 하나라도 등록되면 표시("모든 vault"에는 vault 미상 구 봉인도 포함되므로 1개여도 필터 의미 있음)
       const sel = controls.createEl("select", { cls: "dropdown" });
       sel.createEl("option", { text: t.browserVaultAll, value: "" });
@@ -472,26 +470,21 @@ export class NoteBrowserView extends ItemView {
     for (const { row, name } of this.rows) {
       const d = rowDisplay(row, name);
       const item = list.createDiv({ cls: "nanal-browser-row" });
-      item.style.cssText = "display:flex;align-items:baseline;gap:8px;padding:6px 4px;border-bottom:1px solid var(--background-modifier-border);";
-      const label = item.createDiv();
-      label.style.cssText = "flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
-      if (d.folder) label.createSpan({ text: d.folder + "/" }).style.opacity = "0.55";
+      const label = item.createDiv({ cls: "nanal-browser-label" });
+      if (d.folder) label.createSpan({ text: d.folder + "/", cls: "nanal-browser-folder" });
       label.createSpan({ text: d.file });
-      if (!d.canOpen) { label.style.opacity = "0.6"; label.setAttr("title", t.browserUnnamedHint); }
-      const when = item.createSpan({ text: new Date(row.receivedAt * 1000).toLocaleString() });
-      when.style.cssText = "font-size:0.85em;opacity:0.7;";
-      const status = item.createSpan({ text: row.block != null ? `₿ ${row.block}` : "…" });
-      status.style.cssText = "font-size:0.85em;";
+      if (!d.canOpen) { label.addClass("is-unnamed"); label.setAttr("title", t.browserUnnamedHint); }
+      item.createSpan({ text: new Date(row.receivedAt * 1000).toLocaleString(), cls: "nanal-browser-when" });
+      item.createSpan({ text: row.block != null ? `₿ ${row.block}` : "…", cls: "nanal-browser-status" });
       if (d.canOpen) {
         // 봉인 버전 이력 — 노트당 최신 1행만 보이므로 과거 버전은 여기서(모바일 노트의 '그날로').
-        const hist = item.createEl("button", { text: t.browserHistoryBtn });
-        hist.style.cssText = "font-size:0.8em;padding:1px 8px;";
+        const hist = item.createEl("button", { text: t.browserHistoryBtn, cls: "nanal-browser-hist" });
         hist.addEventListener("click", (ev) => {
           ev.stopPropagation(); // 행 클릭(최신본 열람)과 분리
           if (!this.plugin.hasStoragePlan()) { new Notice(t.browserNeedPlan); return; }
           new NanalHistoryModal(this.app, this.plugin, name as string, row.pathHash, d.isMd).open();
         });
-        item.style.cursor = "pointer";
+        item.addClass("is-clickable");
         item.addEventListener("click", () => {
           void (async () => {
             // D1: usage 미조회(null)면 판정 전 1회 대기 — 세션 초기 유료 사용자 오탐 방지. 캐시 있으면 즉시.
@@ -503,8 +496,7 @@ export class NoteBrowserView extends ItemView {
       }
     }
     if (this.hasMore) {
-      const more = c.createEl("button", { text: t.browserMore });
-      more.style.marginTop = "8px";
+      const more = c.createEl("button", { text: t.browserMore, cls: "nanal-browser-more" });
       more.addEventListener("click", () => void this.loadPage());
     }
   }
@@ -598,7 +590,7 @@ export class DashboardView extends ItemView {
       DashboardView.tipEl = tp;
     }
     tp.setText(text);
-    tp.style.display = "block";
+    tp.addClass("is-shown");
     const r = el.getBoundingClientRect();
     tp.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - tp.offsetWidth - 8))}px`;
     const below = r.bottom + 6;
@@ -606,7 +598,7 @@ export class DashboardView extends ItemView {
   }
 
   private hideTip(): void {
-    if (DashboardView.tipEl) DashboardView.tipEl.style.display = "none";
+    if (DashboardView.tipEl) DashboardView.tipEl.removeClass("is-shown");
   }
 
   private tip(el: HTMLElement, text: string): void {
@@ -1011,8 +1003,9 @@ export class DashboardView extends ItemView {
       }
       const btn = r.createEl("button", { text: t.dashSealNow });
       btn.onclick = () => {
-        if (!this.plugin.settings.apiKey) { new Notice(t.apiKeyMissing); return; }
-        if (!this.plugin.settings.enabled) { new Notice(t.offTitle); return; }
+        // 선검사를 두지 않는다 — 미로그인·꺼짐·범위 밖 판정과 안내는 flush 의 manual 게이트가
+        // 한 곳에서 한다(리본·명령·이 버튼이 같게 행동해야 한다). 여기서 또 검사하면 진입점마다
+        // 문구와 다음 행동이 갈린다.
         const f = this.plugin.app.vault.getAbstractFileByPath(it.path);
         if (f instanceof TFile) {
           btn.disabled = true;
@@ -1053,7 +1046,7 @@ export class DashboardView extends ItemView {
       const slot = fr.createSpan({ cls: "fpend num" });
       if (pendList && pendList.length > 0) {
         const chip = slot.createSpan({ cls: "warn", text: t.dashPendShort(pendList.length) });
-        chip.style.cursor = "pointer";
+        chip.addClass("is-clickable");
         this.tip(chip, t.dashPendTip);
         chip.onclick = () => new StoragePendingModal(this.app, this.plugin, axis ?? label, pendList).open();
       }

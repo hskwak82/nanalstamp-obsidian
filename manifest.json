@@ -1,8 +1,8 @@
 {
   "id": "nanalstamp",
   "name": "nanalStamp",
-  "version": "1.5.0",
-  "minAppVersion": "1.5.0",
+  "version": "1.5.1",
+  "minAppVersion": "1.7.2",
   "description": "Seals each note with a tamper-proof, content-private timestamp anchored to Bitcoin — day by day.",
   "author": "nanalLabs",
   "authorUrl": "https://nanalstamp.com",

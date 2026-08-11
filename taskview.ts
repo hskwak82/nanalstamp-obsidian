@@ -706,7 +706,6 @@ function renderHeaderCell(thr: HTMLElement, c: ColSpec, ctx: WorkInboxCtx, paint
 // 재그림하므로 순서·방향 표시가 즉시 갱신된다. done은 정렬 지정 시 기준대로 섞임(sortUnified 계약).
 function bindSortHeader(th: HTMLElement, arrowHost: HTMLElement, col: SortKey, ctx: WorkInboxCtx, paint: () => void): void {
   th.addClass("is-sortable");
-  th.style.cursor = "pointer";
   const idx = ctx.prefs.sorts.findIndex((s) => s.col === col);
   if (idx !== -1) {
     const dir = ctx.prefs.sorts[idx].dir;
@@ -822,22 +821,9 @@ function sortColLabel(L: PluginI18n, col: SortKey): string {
 // 바깥클릭·Esc로 닫는다. 편집은 prefs.filters 갱신 + savePrefs + repaint(팝오버는 유지).
 function openFilterPopover(fcol: string, kind: "multi" | "text" | "date", anchor: HTMLElement, ctx: WorkInboxCtx): void {
   closePopover();
+  // 겉모양은 전부 styles.css 의 .nanalstamp-tv-pop 이 갖는다(2026-08-11 심사 대응으로 이동 —
+  // 원래 주석에 적혀 있던 "시각 마감은 클래스로" 계획을 그대로 마쳤다). 위치는 아래 setCssStyles.
   const pop = ctx.host.createDiv({ cls: "nanalstamp-tv-pop is-" + kind });
-  // 기능 보장용 최소 인라인 스타일(전부 테마 변수) — 시각 마감은 §Task 12(styles.css)에서 클래스로.
-  pop.style.position = "fixed";
-  pop.style.zIndex = "1000";
-  pop.style.background = "var(--background-secondary)";
-  pop.style.border = "1px solid var(--background-modifier-border-hover)";
-  pop.style.borderRadius = "6px";
-  pop.style.padding = "8px";
-  // ring(1px)이 배경색과 무관하게 경계를 그려 순검정 AMOLED 테마에서도 팝오버가 떠 보인다 + 큰 blur는 일반 테마용.
-  pop.style.boxShadow = "0 0 0 1px var(--background-modifier-border-hover), 0 10px 30px rgba(0, 0, 0, 0.55)";
-  pop.style.minWidth = "180px";
-  pop.style.maxHeight = "320px";
-  pop.style.overflowY = "auto";
-  pop.style.display = "flex";
-  pop.style.flexDirection = "column";
-  pop.style.gap = "4px";
 
   if (kind === "multi") buildMultiPop(pop, fcol, ctx);
   else if (kind === "text") buildTextPop(pop, fcol, ctx);

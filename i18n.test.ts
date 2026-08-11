@@ -106,3 +106,13 @@ test("setLang: t/tpl이 실제로 교체되고 pickLang은 DOM 없이도 en으�
   const lang: Lang = pickLang();
   assert.equal(t.langReload, STR[lang].langReload);
 });
+
+// EN 사전에 한국어가 섞이면 영어 사용자 화면에 그대로 한글이 뜬다. 사람 눈으로는 1,000키 중
+// 두어 개를 놓치므로(2026-08-09 실측: statusHold·blobCheck 2건이 그렇게 남아 있었다) 기계로 고정한다.
+test("EN 사전 값에 한글이 없다 — en UI에 한국어가 새는 회귀 방지(P-04)", () => {
+  const hangul = /[ㄱ-ㆎ가-힣]/;
+  // 함수형 키는 toString() 으로 본문까지 본다 — esbuild 번들이 주석을 제거하므로 함수 본문에
+  // 한국어 주석이 남아 오탐을 내는 일은 없다는 전제다(주석이 남는 빌드로 바뀌면 이 전제도 깨진다).
+  const bad = Object.entries(en).filter(([, v]) => hangul.test(typeof v === "string" ? v : String(v)));
+  assert.deepEqual(bad.map(([k]) => k), [], "EN 값에 한글 포함 — 해당 키를 영어로 교체할 것");
+});

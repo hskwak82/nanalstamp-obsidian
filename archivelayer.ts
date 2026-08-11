@@ -2,18 +2,18 @@
 // main.ts에서 **본문 무변경**으로 이동(2026-07-26). 상속 순서:
 //   NanalStampPlugin → ArchiveLayer → StorageLayer → NanalStampBase → Plugin
 // StorageLayer 위에 두는 이유: 아카이브가 S3 전송(nanalFetch 등)을 부르지만 그 반대는 없다.
-import { FileSystemAdapter, Notice, Platform, TFile, TFolder, normalizePath } from "obsidian";
+import { FileSystemAdapter, Notice, Platform, TFile } from "obsidian";
 import * as git from "isomorphic-git";
 import { t } from "./i18n";
-import { fmtDate, fmtDateTime } from "./fmtutil";
-import { nodeReq, sha256Hex, sha256HexBytes, basenameOf, safeName, hashPath, isExcalidrawNote, splitExcalidrawName } from "./pathutil";
-import { ARCHIVE_SOURCE_VIEW_TYPE, REWIND_LOG_TTL_MS, ARCHIVE_INLINE_MAX, ARCHIVE_REF_EXT } from "./constants";
+import { fmtDateTime } from "./fmtutil";
+import { nodeReq, sha256HexBytes, basenameOf, safeName, hashPath } from "./pathutil";
+import { REWIND_LOG_TTL_MS, ARCHIVE_INLINE_MAX, ARCHIVE_REF_EXT } from "./constants";
 import { blobExt, restoredPath } from "./storagecore";
 import { ArchiveVersionModal, AttachmentVersionModal } from "./modals";
 import { buildArchiveMsg, parseArchiveMsg, archiveNotePath } from "./archivemsg";
-import { RewindEntry, parseRewindCommit, deletedEntries, pathSpans, collapseRenames, successorCandidates } from "./rewindcore";
+import { RewindEntry, parseRewindCommit, pathSpans, collapseRenames, successorCandidates } from "./rewindcore";
 import { ArchiveEntry, parseArchiveCommit } from "./dashcore";
-import { isSealableFile, isMarkdownPath } from "./sealscope";
+import { isMarkdownPath } from "./sealscope";
 import { StorageLayer } from "./storagelayer";
 // 모달 2종은 최종 클래스(NanalStampPlugin) 타입을 받는다. 이 계층에서 `this`는 아직
 // ArchiveLayer이므로 다운캐스트가 필요하다 — 런타임에는 항상 NanalStampPlugin 인스턴스다.
@@ -64,12 +64,12 @@ export abstract class ArchiveLayer extends StorageLayer {
   // 상해도 되는 캐시인가: git 객체는 **내용이 곧 이름(oid)** 이라 같은 oid 는 영원히 같은
   // 바이트다. 오래된 값을 돌려줄 수가 없다.
   protected gitCache: object = {};
-  private gitCacheTimer: ReturnType<typeof setTimeout> | null = null;
+  private gitCacheTimer: number | null = null;   // window.setTimeout 의 반환(브라우저 런타임)
   private static readonly GIT_CACHE_IDLE_MS = 60_000;
 
   private touchGitCache(): void {
-    if (this.gitCacheTimer) clearTimeout(this.gitCacheTimer);
-    this.gitCacheTimer = setTimeout(() => {
+    if (this.gitCacheTimer) window.clearTimeout(this.gitCacheTimer);
+    this.gitCacheTimer = window.setTimeout(() => {
       this.gitCache = {};
       this.gitCacheTimer = null;
     }, ArchiveLayer.GIT_CACHE_IDLE_MS);

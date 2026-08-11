@@ -3,10 +3,10 @@
 // private → protected 는 계층이 갈리며 필요한 최소 변경(외부 공개 아님).
 import { FileSystemAdapter, Notice, TFile, RequestUrlResponse, requestUrl } from "obsidian";
 import { t } from "./i18n";
-import { hexToBase64, fmtBytes, blobExt, blobContentType, PROOF_EXT, bodyByteSize, storageEndpoint } from "./storagecore";
+import { hexToBase64, blobExt, PROOF_EXT, bodyByteSize, storageEndpoint } from "./storagecore";
 import { cdcChunks, nextCut, buildManifest, parseManifest, CHUNK_THRESHOLD, CHUNK_MAX } from "./chunkcore";
 import { encryptBlob, decryptBlob, isEncrypted } from "./cryptocore";
-import { nodeReq, sha256Hex, sha256HexBytes, hashPath, hashVaultName, basenameOf, safeName } from "./pathutil";
+import { nodeReq, sha256Hex, sha256HexBytes } from "./pathutil";
 import { UPLOAD_CONCURRENCY } from "./constants";
 import { isMarkdownPath } from "./sealscope";
 import { NanalStampBase } from "./pluginbase";
@@ -107,7 +107,7 @@ export abstract class StorageLayer extends NanalStampBase {
         if (n <= 0) break;
         h.update(buf.subarray(0, n));
         pos += n; since += n;
-        if (since >= (64 << 20)) { since = 0; await new Promise((r) => setTimeout(r, 0)); }
+        if (since >= (64 << 20)) { since = 0; await new Promise((r) => window.setTimeout(r, 0)); }
       }
     } finally { fs.closeSync(fd); }
     return h.digest("hex");
@@ -394,6 +394,9 @@ export abstract class StorageLayer extends NanalStampBase {
   /// 빠뜨린 자리가 조용히 팀 저장소로 가는 것이 2026-07-31 에 겪은 사고다.
   protected async nanalPutBlob(sealedHash: string, blobHash: string, ext: string, contentType: string, body: string | ArrayBuffer, force: boolean, team: boolean, encSha256?: string): Promise<boolean> {
     if (Date.now() < this.storageQuotaBackoffUntil) return false;
+    // 거부된 키로 계속 밀지 않는다 — 원문·증명·청크·manifest 쓰기가 전부 이 함수를 지나므로
+    // 여기 한 곳이면 충분하다. team 인자는 바로 아래 keyFor 에 넘기는 것과 같은 값이다(P-03).
+    if (this.authFailedFor(team)) return false;
     const size = bodyByteSize(body);
     const pre = await this.requestWithOneRetry(() => requestUrl({
       url: storageEndpoint(this.base(), team, "presign"),
@@ -410,6 +413,11 @@ export abstract class StorageLayer extends NanalStampBase {
       if (first) new Notice(t.nanalQuotaFull);
       return false;
     }
+    // 키 거부는 재시도로 낫지 않는다 — 해당 계정만 세우고 다음 호출은 첫머리 가드가 조용히 막는다.
+    // 분기·Notice·상태바는 markAuthFailed 가 flush 의 401 과 똑같이 처리한다(P-03).
+    // **presign 응답만** 본다: 아래 PUT 은 S3 presigned URL 이라 403 이 서명·만료 문제일 수 있고,
+    // 그것으로 키를 죽이면 멀쩡한 계정의 보관이 통째로 멈춘다.
+    if (pre.status === 401 || pre.status === 403) { this.markAuthFailed(team); return false; }
     if (pre.status !== 200) { console.error("[nanalstamp] storage presign", pre.status, pre.json?.error ?? ""); return false; }
     if (pre.json?.exists) return true; // 이미 저장됨(콘텐츠주소 중복제거)
     const put = await this.requestWithOneRetry(() => requestUrl({

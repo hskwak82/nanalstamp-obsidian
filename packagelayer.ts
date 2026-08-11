@@ -6,7 +6,7 @@
 //
 // 왜 vault 를 가진 플러그인이 만드는가: 서버는 노트 **경로를 모른다**(해시만 저장한다).
 // "어느 파일이 몇 번째 기록인가"를 맞출 수 있는 것은 원본을 가진 이쪽뿐이다.
-import { Notice, TFile, TFolder, normalizePath, requestUrl } from "obsidian";
+import { TFile, TFolder, normalizePath, requestUrl } from "obsidian";
 import { t } from "./i18n";
 import { sha256HexBytes, hashPath, safeName } from "./pathutil";
 import { blobExt } from "./storagecore";

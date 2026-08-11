@@ -1,32 +1,32 @@
-import { addIcon, arrayBufferToBase64, App, FileSystemAdapter, FuzzySuggestModal, ItemView, MarkdownRenderer, MarkdownView, Menu, Modal, Notice, Platform, Plugin, PluginSettingTab, RequestUrlResponse, Setting, TFile, TFolder, ViewStateResult, WorkspaceLeaf, requestUrl, setIcon, setTooltip } from "obsidian";
+import { addIcon, arrayBufferToBase64, FileSystemAdapter, MarkdownView, Menu, Notice, Platform, RequestUrlResponse, TFile, TFolder, requestUrl } from "obsidian";
 import * as git from "isomorphic-git";
 import { PitVerify, pitVerifyReadme, pitCertificateHtml } from "./certgen";
 import * as QRCode from "qrcode";
-import { ArchiveEntry, computeDigestStats, parseArchiveCommit, coverage, gaps, timeline, heatmapCounts, syncStatus, certCandidates, Gap, topFolder, periodKey, previousPeriod, periodLabel } from "./dashcore";
+import { computeDigestStats, previousPeriod, periodLabel } from "./dashcore";
 import { isSealableFile, isOverSizeLimit, isMarkdownPath, inSealScopePure, inFolderScopePure, scopeUnset, isRestoredCopy, isKitSample, RESTORED_PREFIXES, inTeamRootPure, teamBlobScopePure, apiKeyForPure } from "./sealscope";
 import { scopeBody, scopeDocument, scopeChanged, SCOPE_ZERO } from "./scopecore";
 import { verifySealAck } from "./chaincore";
 import { chunk, pendingFrom, rotationSlice, reconcileStale, toAsk, HAVE_CHUNK, ScannedFile } from "./reconcilecore";
 import { sealHold, effectiveLimit, planThatFits, HoldReason, MB } from "./holdcore";
-import { buildArchiveMsg, parseArchiveMsg } from "./archivemsg";
-import { hexToBase64, blobExt, blobContentType, PROOF_EXT, bodyByteSize, fmtBytes, storageEndpoint, restoredPath } from "./storagecore";
-import { cdcChunks, buildManifest, parseManifest, CHUNK_THRESHOLD } from "./chunkcore";
-import { encryptBlob, decryptBlob, isEncrypted } from "./cryptocore";
-import { RewindEntry, parseRewindCommit, deletedEntries, pathSpans, collapseRenames, successorCandidates } from "./rewindcore";
-import { parseHistoryResponse, parseNotesResponse, parseVaultsResponse, rowDisplay, HistRow, NoteRow, VaultRow } from "./notebrowsercore";
-import { TaskItem, TaskReply, RosterMember, personDisplay, rosterLabel, parseTasksResponse, parseRepliesResponse, parseRosterResponse, isOverdue, dueKind, badgeCount, unionTasks, snapshotOf, diffSnapshot, TaskSnapshot, TaskEvent, sseInitialState, sseFeed, tasksRenderKey, parsePatterns, matchesPatterns, unreported, KitManifest, buildTaskCreatePayloads, summarizeFanout, FanoutOutcome, parseTeamStructure, parseKitManifest, manifestPaths, nfcPath, nfcPaths, creationPlan, isBinaryPath, projectPrefix, commonPrefix, scopedPatterns, TeamStructure, folderStatus, FolderStatus, FolderTarget, detectFolderConflicts, detectFolderRenames, FolderNameSnapshot, FolderRename, unifyTasks, UnifiedTask, TaskType, taskActionDefs, SortKey, templateForFolder, teamFolderName, isUntitledName, nextNoteName, parseFolderRules, kitRuleFor, teamFolderSegment, digestFolderFor, capFolderReport } from "./taskcore";
-import { renderWorkInbox, closePopover, actionLabel, runAction } from "./taskview";
-import type { TaskViewPrefs, WorkInboxActions } from "./taskview";
+import { parseArchiveMsg } from "./archivemsg";
+import { blobExt, fmtBytes, storageEndpoint } from "./storagecore";
+import { parseManifest } from "./chunkcore";
+import { encryptBlob, decryptBlob } from "./cryptocore";
+import { RewindEntry, deletedEntries } from "./rewindcore";
+import { parseHistoryResponse, parseNotesResponse, parseVaultsResponse, HistRow, NoteRow, VaultRow } from "./notebrowsercore";
+import { TaskItem, TaskReply, RosterMember, personDisplay, parseTasksResponse, parseRepliesResponse, parseRosterResponse, badgeCount, unionTasks, snapshotOf, diffSnapshot, TaskSnapshot, TaskEvent, sseInitialState, sseFeed, parsePatterns, matchesPatterns, unreported, KitManifest, parseTeamStructure, parseKitManifest, manifestPaths, nfcPath, nfcPaths, creationPlan, isBinaryPath, projectPrefix, commonPrefix, scopedPatterns, TeamStructure, folderStatus, FolderTarget, detectFolderConflicts, detectFolderRenames, FolderNameSnapshot, FolderRename, SortKey, templateForFolder, isUntitledName, nextNoteName, kitRuleFor, teamFolderSegment, digestFolderFor, capFolderReport } from "./taskcore";
+import { runAction } from "./taskview";
+import type { TaskViewPrefs } from "./taskview";
 // 번역 사전은 i18n.ts 소유 — `t`/`tpl`은 setLang()이 재대입하는 live binding이다(재대입은 i18n.ts에서만).
-import { t, tpl, pickLang, setLang, reviewVerdictLabel } from "./i18n";
-import { pad2, fmtDate, fmtDateTime, fmtUtc } from "./fmtutil";
-import { ICON_ID, GITHUB_OAUTH_CLIENT_ID, GITHUB_DEFAULT_REPO, ARCHIVE_SOURCE_VIEW_TYPE, NOTE_BROWSER_VIEW_TYPE, DASHBOARD_VIEW_TYPE, DASH_HASH_CAP, DASH_GAP_ROWS, DASH_TL_ROWS, TASK_INBOX_VIEW_TYPE, TASK_POLL_MS, TASK_SSE_RETRY_MIN_MS, TASK_SSE_RETRY_MAX_MS, ARCHIVE_INLINE_MAX } from "./constants";
-import { nodeReq, defaultArchivePath, defaultArchivePathSafe, parseFolders, sha256Hex, sha256HexBytes, PATH_HASH_PREFIX, hashVaultName, hashPath, toBase64, basenameOf, extOf, isExcalidrawNote, splitExcalidrawName, safeName } from "./pathutil";
+import { t, tpl, pickLang, setLang } from "./i18n";
+import { fmtDate, fmtDateTime } from "./fmtutil";
+import { ICON_ID, ARCHIVE_SOURCE_VIEW_TYPE, NOTE_BROWSER_VIEW_TYPE, DASHBOARD_VIEW_TYPE, TASK_INBOX_VIEW_TYPE, TASK_POLL_MS, TASK_SSE_RETRY_MIN_MS, TASK_SSE_RETRY_MAX_MS, ARCHIVE_INLINE_MAX } from "./constants";
+import { defaultArchivePath, parseFolders, sha256Hex, sha256HexBytes, PATH_HASH_PREFIX, hashVaultName, hashPath, toBase64, basenameOf, safeName } from "./pathutil";
 import { NanalStampSettingTab, FolderTreeModal } from "./settingtab";
-import { AccountResumeModal, ProofModal, ArchiveVersionModal, AttachmentVersionModal, OnboardingScopeModal, RestoreConfirmModal, RenameLinkSuggestModal, DeletedNoteSuggestModal, StoragePendingModal, RestoreVaultModal, NanalHistoryModal, PasswordResetModal, GitHubConnectModal } from "./modals";
+import { AccountResumeModal, ProofModal, OnboardingScopeModal, DeletedNoteSuggestModal, RestoreVaultModal, PasswordResetModal } from "./modals";
 import { ArchiveSourceView, NoteBrowserView, DashboardView, TaskInboxView } from "./views";
 import type { ArchiveSourceState } from "./views";
-import { TaskComposeModal, TaskRequestModal, TaskDeclineModal, TaskDetailModal, TaskDoneModal, TaskReopenModal, FolderRenameModal, FolderCreateModal, FolderConflictModal } from "./taskmodals";
+import { FolderRenameModal, FolderCreateModal, FolderConflictModal } from "./taskmodals";
 import type { Lang } from "./i18n";
 import { RecoveryLayer } from "./recoverylayer";
 import { SubmissionPackageModal } from "./packagemodal";
@@ -53,8 +53,7 @@ function sealNotice(text: string, timeout?: number): Notice {
   img.src = NANAL_SEAL_DATA_URI;
   img.width = 16;
   img.height = 16;
-  img.style.verticalAlign = "text-bottom";
-  img.style.marginRight = "4px";
+  img.addClass("nanalstamp-notice-seal");
   frag.appendChild(img);
   frag.appendChild(document.createTextNode(text));
   return new Notice(frag, timeout);
@@ -122,7 +121,7 @@ export interface AttestSettings {
   templatesEnabled: boolean;
   noteFolder: string;
   digestFolder: string;        // 5.2: 월간 digest 노트가 저장·인식되는 폴더(미러 시 digests/로 라우팅)
-  onboarded: boolean;          // 첫 실행 환영 모달 표시 여부
+  onboarded: boolean;          // 첫 활성화 온보딩(설정 안내) 1회 완료 여부
   failedPaths: string[];       // 전송 실패 큐(재시작 후에도 재시도)
   /// 봉인 시점 업로드가 실패해 재시도해야 하는 경로. **메모리에만 두면 Obsidian 을 끄는
   /// 순간 사라져 그 버전 원문이 영구 유실된다**(2026-07-29 실측: 260건 누락의 한 갈래).
@@ -181,7 +180,9 @@ export interface AttestSettings {
   teamAttachmentMaxMB: number | null; // 3.2: 팀 프로파일이 배포한 첨부 상한(MiB, 0=무제한) — 업로드 유효 상한 = uploadLimitMB() 참조(개인 설정 UI 없음)
   quotaWarnedAt: number;               // 보관 용량 경고를 낸 단계(0·80·95) — 같은 단계 반복 알림 방지
   attachmentMaxMb: number;             // 요금제가 정한 첨부 크기 상한(MiB, 0=무제한) — /attest/pricing 에서 수신
-  sealHolds: Record<string, { kind: string; path: string; size: number; limitMB: number; byTeam?: boolean; at: number }>;
+  // kind 는 noteSealHold 가 HoldReason 에서 그대로 옮겨 적는 두 값뿐이다 — 리터럴로 좁혀
+  // 표시부(holdDetailLine)가 임의 문자열을 받지 않게 한다.
+  sealHolds: Record<string, { kind: "attach" | "quota"; path: string; size: number; limitMB: number; byTeam?: boolean; at: number }>;
                                        // 봉인 보류 목록(경로 → 사유). 조용한 실패를 막기 위해 영속한다.
   attachSkipped: string[];     // 클라우드 보관(업로드)에서 제외된 첨부 경로 — 팀 정책 또는 5GB 하드캡 초과(봉인·해시 증명은 항상 됨). 침묵 누락 방지로 설정탭에 노출
   teamProfileEnabled: boolean; // 3.2: 팀 프로파일 자동 적용(폴더 필터·첨부 설정을 팀 정책이 관리). 끄면 로컬 값 유지
@@ -467,7 +468,21 @@ export default class NanalStampPlugin extends RecoveryLayer {
     this.taskBadgeEl = ribbonEl.createSpan({ cls: "nanalstamp-task-ribbon-badge" });
     this.statusEl = this.addStatusBarItem();
     this.statusEl.addClass("mod-clickable"); // 호버 어포던스(Obsidian 상태바 클릭 스타일)
-    this.registerDomEvent(this.statusEl, "click", () => this.showProof()); // 클릭 → 증명/이력 모달
+    this.registerDomEvent(this.statusEl, "click", () => {
+      // 클릭은 **표시와 같은 판정**을 따른다(P-07) — updateActiveStatus 의 분기 순서와 같게 둔다.
+      // 미로그인 상태의 유일한 단서가 이 상태바다. 같은 Notice 를 반복하지 말고 로그인 폼을 연다.
+      // 배지가 "팀 키 거부됨"인 동안에도 목적지는 설정이다(연동 카드의 재연결 폼) — 표시가
+      // 회복을 가리키는데 클릭이 증명 모달을 열면 그게 P-07 이 말하는 어긋남이다.
+      // enabled 꺼짐·대조 미상·업로드 중은 **일부러** 막지 않는다: 눌러서 갈 만한 곳이 없다.
+      if (!this.settings.apiKey || this.authFailed || this.teamKeyRejected()) { this.openOwnSettings(); return; }
+      // 툴팁이 "눌러서 폴더를 고르세요"라고 말한다 — 클릭이 실제로 그 일을 해야 한다.
+      if (this.scopeUnset()) { new OnboardingScopeModal(this.app, this).open(); return; }
+      // 파일 탭이 아닌 상태에서 showProof 를 열면 getActiveFile()이 '최근 파일'을 돌려주어
+      // **엉뚱한 노트의 증명**이 뜬다. 판정은 표시와 같은 술어를 쓴다(overviewViewActive).
+      const f = this.app.workspace.getActiveFile();
+      if (this.overviewViewActive() || !f || !this.isSealable(f)) { void this.openDashboard(); return; }
+      this.showProof(); // 파일 상태일 때만 — 원래 동작
+    });
     void this.updateActiveStatus();
 
     this.registerEvent(
@@ -632,7 +647,8 @@ export default class NanalStampPlugin extends RecoveryLayer {
     this.startTaskSse();
 
     this.addSettingTab(new NanalStampSettingTab(this.app, this));
-    // 온보딩은 자동 팝업 대신 설정 화면 상단 소개 섹션으로 노출(팝업 제거).
+    // 온보딩 내용 자체는 설정 화면 상단 소개 섹션이 담당한다(환영 모달은 폐지).
+    // 첫 활성화 1회만 그 설정 화면으로 데려다준다 — onload 말미의 onboarded 블록 참조.
     void this.refreshEntitlement();
     // 재시작 따라잡기: 워크스페이스 준비 후, 마지막 실행 이후 수정된 노트를 봉인(강제종료 복구)
     this.app.workspace.onLayoutReady(() => {
@@ -680,6 +696,27 @@ export default class NanalStampPlugin extends RecoveryLayer {
         })
       );
     });
+
+    // 첫 활성화 1회 — 설치 직후 아무 안내가 없으면 시작점을 찾지 못한다(2026-08-08 퍼널 검토).
+    // onLayoutReady 이후에 연다: 로드 중 설정 모달이 뜨면 vault 초기화와 겹쳐 어색하다.
+    if (!this.settings.onboarded) {
+      this.app.workspace.onLayoutReady(() => {
+        this.settings.onboarded = true;
+        void this.saveSettings();
+        if (!this.settings.apiKey) {
+          new Notice(t.onboardNotice, 8000);
+          this.openOwnSettings();
+        }
+      });
+    }
+  }
+
+  /** 이 플러그인의 설정 탭을 연다. setting API는 공개 타입에 없어 any 캐스팅(커뮤니티 관례). */
+  openOwnSettings(): void {
+    const s = (this.app as any).setting;
+    if (!s?.open) return; // 비공식 API — 없는 환경에서 던지면 클릭이 무반응이 된다(고치려던 증상과 같은 모양).
+    s.open();
+    s.openTabById?.(this.manifest.id);
   }
 
   onunload() {
@@ -1504,6 +1541,11 @@ export default class NanalStampPlugin extends RecoveryLayer {
         if (hash === s.lastHash) continue;
         const pathHash = nodeCrypto.createHash("sha256").update(PATH_HASH_PREFIX + path, "utf8").digest("hex");
         const payload = JSON.stringify({ api_key: this.settings.apiKey, hash, path: pathHash });
+        // Store review note: sendBeacon is used ONLY here, to flush the last pending seal when the
+        // app is closing. It is not analytics/telemetry — the payload is this user's own note hash
+        // going to their own account on the same host as every other request. requestUrl (and any
+        // async call) is not guaranteed to complete during unload, which would silently lose the
+        // seal of the note the user just edited.
         navigator.sendBeacon(url, payload); // 문자열=text/plain(simple request) → preflight 없이 전송 보장
         s.lastHash = hash;
       }
@@ -1671,6 +1713,26 @@ export default class NanalStampPlugin extends RecoveryLayer {
   }
 
   async flush(file: TFile, reason: string) {
+    // 로그인 게이트가 범위 게이트보다 **먼저**다(P-08). 미로그인 사용자가 수동 봉인을 누르면
+    // 폴더를 고르라는 모달이 아니라 로그인 안내를 받아야 한다 — 순서가 반대면 로그인도 안 한
+    // 사람이 범위를 정하게 되고, 그 선택으로 scopeChosen 이 소모돼 로그인 직후의 안내가 사라진다.
+    if (!this.settings.apiKey) {
+      if (reason === "manual") { new Notice(t.apiKeyMissing); this.openOwnSettings(); }
+      return; // 자동 경로는 기존과 동일하게 침묵(상태바가 안내한다)
+    }
+    // 키 거부가 범위 게이트보다 **먼저**다(M-1) — 로그인 게이트와 같은 논거다: 키가 거부된
+    // 상태에서 수동 봉인이 범위 모달을 열면, 고치지도 못할 상태에서 선택만 소모된다.
+    // 거부된 키의 범위만 중단(P-03). 수동 클릭은 조용한 no-op 이 되면 안 되므로 이유를 말한다 —
+    // 팀 키 거부는 목적지가 설정 메인이 아니라 연동 카드라, 화면을 여는 대신 안내만 한다.
+    const pathInTeam = this.inTeamRoot(file.path);
+    if (this.authFailedFor(pathInTeam)) {
+      if (reason === "manual") {
+        const teamKeyBad = pathInTeam && !!this.settings.teamApiKey;
+        new Notice(teamKeyBad ? t.teamAuthFail : t.authFail);
+        if (!teamKeyBad) this.openOwnSettings();
+      }
+      return;
+    }
     // 범위 미설정이면 봉인하지 않는다(2026-07-28). inSealScope도 false를 주지만, **수동 실행일 때는
     // 이유를 말해야 한다** — 명령을 눌렀는데 아무 일도 안 일어나면 고장으로 읽힌다.
     if (this.scopeUnset()) {
@@ -1680,9 +1742,16 @@ export default class NanalStampPlugin extends RecoveryLayer {
       }
       return;
     }
-    if (!this.settings.enabled || !this.inSealScope(file.path)) return;
-    if (!this.settings.apiKey) return; // API 키 미설정 → 전송 안 함(상태바가 안내)
-    if (this.authFailed) return;       // 키 거부됨 → 갱신 전까지 재시도 중단(무한루프 방지)
+    // 자동 경로는 침묵하지만 **수동 클릭에는 이유를 말한다** — 눌렀는데 아무 일도 없으면
+    // 고장으로 읽힌다(범위 미설정 게이트와 같은 취지). 문구는 상태바 툴팁과 같은 것을 쓴다.
+    if (!this.settings.enabled) {
+      if (reason === "manual") new Notice(t.offTitle);
+      return;
+    }
+    if (!this.inSealScope(file.path)) {
+      if (reason === "manual") new Notice(t.outScopeTitle);
+      return;
+    }
     const s = this.stateOf(file.path);
     if (s.timer) {
       window.clearTimeout(s.timer);
@@ -1740,10 +1809,10 @@ export default class NanalStampPlugin extends RecoveryLayer {
       });
       // 401/403: 키가 나쁘거나 만료 — 무한 재시도 중단하고 사용자에게 알림
       if (res.status === 401 || res.status === 403) {
-        this.authFailed = true;
+        // 어느 키가 거부됐는지 갈라 세운다 — 팀 좌석 회수가 개인 봉인을 멈추면 안 된다(P-03).
+        // 분기·Notice·상태바 갱신은 markAuthFailed 한 곳에 있다(presign 401 과 같은 규칙).
+        this.markAuthFailed(inTeam);
         if (this.failed.delete(file.path)) void this.persistFailed();
-        void this.updateActiveStatus();
-        new Notice(t.authFail);
         return;
       }
       // 429: Retry-After 존중(없으면 지수형 상한) + 지터. 큐에 남겨 재시도.
@@ -1939,7 +2008,10 @@ export default class NanalStampPlugin extends RecoveryLayer {
         file = await this.app.vault.create(fpath, `${tpl.title(d)}\n${entryBlock("cont")}`);
         new Notice(t.devNoteCreated(fpath));
       }
-      await this.app.workspace.getLeaf(false).openFile(file as TFile);
+      // 위 분기를 지나면 반드시 TFile 이다(있으면 그것, 없으면 방금 만든 것). 캐스팅 대신 좁힌다 —
+      // 같은 경로에 폴더가 있으면 캐스팅은 openFile 에서 터지지만 이쪽은 조용히 물러난다.
+      if (!(file instanceof TFile)) return;
+      await this.app.workspace.getLeaf(false).openFile(file);
       const ed = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
       if (ed) ed.setCursor(ed.lineCount(), 0);
     } catch (e: any) {
@@ -2012,7 +2084,10 @@ export default class NanalStampPlugin extends RecoveryLayer {
       // inScope 그대로 유지 — fpath는 항상 새로 만든 .md(다이제스트 노트) 자신의 경로다. 참조 스코프
       // 면제(inSealScope)는 노트가 아니라 첨부에 적용되는 예외이므로 여기엔 해당하지 않는다.
       if (!this.inScope(fpath)) new Notice(t.digestOutOfScope); // 봉인 범위 밖이면 경고만(자동 변경 안 함)
-      await this.app.workspace.getLeaf(false).openFile(file as TFile);
+      // 위 분기를 지나면 반드시 TFile 이다(있으면 그것, 없으면 방금 만든 것). 캐스팅 대신 좁힌다 —
+      // 같은 경로에 폴더가 있으면 캐스팅은 openFile 에서 터지지만 이쪽은 조용히 물러난다.
+      if (!(file instanceof TFile)) return;
+      await this.app.workspace.getLeaf(false).openFile(file);
       const ed = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
       if (ed) ed.setCursor(ed.lineCount(), 0);
       this.updateTaskRibbon();
@@ -2095,6 +2170,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
     this.dekCache.delete("team");
     this.dekDeny.delete("team");
     this.lastUsage = null;
+    this.teamAuthFailed = false; // 새 팀 키(또는 해제 후 개인 키)로 재시도 허용
   }
 
   /// 해시만 알고 경로를 모르는 요청은 **양쪽 계정에 물어본다**.
@@ -2153,7 +2229,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
 
   /// vault 에서 사라진 노트의 원문을 **아카이브에서** 꺼내 올린다.
   ///
-  /// 지운 노트라도 봉인된 그 버전은 로컬 git 에 있다. 복구 명령(「보관된 원문 점검」)이
+  /// 지운 노트라도 봉인된 그 버전은 로컬 git 에 있다. 복구 명령(「원문 보관 상태 점검」)이
   /// 쓰는 길을 자동 재시도도 쓰게 한 것뿐이다 — 새 경로가 아니다.
   /// 못 찾으면 그때는 큐에서 뺀다(정말 올릴 것이 없다).
   private async retryFromArchive(path: string, knownHash?: string): Promise<void> {
@@ -2187,8 +2263,17 @@ export default class NanalStampPlugin extends RecoveryLayer {
   ): Promise<void> {
     // 보관을 끄는 설정은 없다. 예전에는 "증명 자동 저장" 토글 하나가 여기서 return 을 시켜
     // 아카이브 커밋·미러·스토리지 전송까지 통째로 막았다 — 그 토글 자체를 없앴다(2026-07-30).
-    if (!this.settings.enabled || !this.settings.apiKey || this.authFailed) return;
+    // 키 거부는 **경로별로** 판단한다(아래 authFailedFor) — 여기서 개인 플래그로 통째로 막으면
+    // 개인 키만 거부된 사용자의 팀 노트 원문 보관이 사유도 없이 멈춘다(P-03 완결).
+    if (!this.settings.enabled || !this.settings.apiKey) return;
     if (!this.inSealScope(file.path)) return;
+    // 거부된 키로는 아래 번들 조회부터 401 이다 — 30초마다 다시 물으면 stall 사유가 "HTTP 401"로
+    // 덮여 진짜 원인(키 거부)이 가려진다. 사유를 남기고 재시도 셋에 걸어 둔다:
+    // 키가 복구되면(saveSettings·resetTeamKeyCaches 가 플래그를 내린다) 다음 틱에서 재개된다(P-03).
+    if (this.authFailedFor(this.inTeamRoot(file.path))) {
+      this.stallUpload(file.path, "로그인 키가 거부됨 — 다시 로그인하면 재개됩니다", true);
+      return;
+    }
     const archiveNeeded = this.archiveEnabled();
     const mirrorNeeded = this.mirrorActive();
     let nanalNeeded = this.nanalActive();
@@ -2295,6 +2380,9 @@ export default class NanalStampPlugin extends RecoveryLayer {
   // 각 path의 현재 해시가 아직 sealedIndex와 같으면(그 봉인 유지 중) recordSealProof 재호출; 편집돼 달라졌으면
   // 그 중간 버전은 이미 새 봉인이 recordSealProof를 다시 부르므로 셋에서 제거.
   private retrySealArchive() {
+    // 개인 키 거부 중에는 재시도 틱 자체가 쉰다 — 팀 경로 재개는 개인 키 복구 후.
+    // 의도된 단순화(2026-08-09 최종 리뷰). 봉인 시점의 첫 시도는 per-path 로 갈리므로
+    // 팀 노트가 **새로** 봉인되는 길은 열려 있고, 여기서 막히는 것은 밀린 재시도뿐이다.
     if (!this.settings.enabled || this.authFailed || this.sealArchiveRetry.size === 0) return;
     if (this.backoffUntil > Date.now()) return; // 429 백오프 존중
     for (const p of Array.from(this.sealArchiveRetry)) {
@@ -2319,8 +2407,12 @@ export default class NanalStampPlugin extends RecoveryLayer {
   // Pro·미러 on이면 원본+증명을 GitHub에 push. 이미 같은 해시로 저장돼 있으면 아무 것도 안 함.
   // verify(옵션)를 주면 서버 재조회를 아낀다(확정 판정·seq·블록고에 사용).
   private async recordConfirmedProof(file: TFile, hash: string, verify?: any, silent = false): Promise<boolean> {
-    if (!this.settings.enabled || !this.settings.apiKey || this.authFailed) return false;
+    // 위와 같다 — blanket 게이트 없이 아래 per-path 판정이 전담한다(P-03 완결).
+    if (!this.settings.enabled || !this.settings.apiKey) return false;
     if (!this.inSealScope(file.path)) return false;
+    // 위와 같은 이유 — 거부된 키로 번들을 다시 묻지 않는다. 이 함수는 실패를 조용히 false 로
+    // 돌려주는 것이 관례이고, 보류 기록은 recordSealProof 가 이미 남겼다(P-03).
+    if (this.authFailedFor(this.inTeamRoot(file.path))) return false;
 
     const mirrorNeeded = this.mirrorActive();
     const archiveNeeded = this.archiveEnabled();
@@ -2676,19 +2768,19 @@ export default class NanalStampPlugin extends RecoveryLayer {
     const state: ArchiveSourceState = { oid: ver.oid, rel, safe, isMd, notePath, seq: ver.seq, block: ver.block, ts: ver.ts };
     const leaf = this.app.workspace.getLeaf("tab");
     await leaf.setViewState({ type: ARCHIVE_SOURCE_VIEW_TYPE, active: true, state: state as unknown as Record<string, unknown> });
-    this.app.workspace.revealLeaf(leaf);
+    await this.app.workspace.revealLeaf(leaf);
   }
 
   async openDashboard(): Promise<void> {
     const existing = this.app.workspace.getLeavesOfType(DASHBOARD_VIEW_TYPE);
     if (existing.length) {
-      this.app.workspace.revealLeaf(existing[0]);
+      await this.app.workspace.revealLeaf(existing[0]);
       if (existing[0].view instanceof DashboardView) void existing[0].view.render();
       return;
     }
     const leaf = this.app.workspace.getLeaf(true);
     await leaf.setViewState({ type: DASHBOARD_VIEW_TYPE, active: true });
-    this.app.workspace.revealLeaf(leaf);
+    await this.app.workspace.revealLeaf(leaf);
   }
 
   // 봉인 노트 브라우저 열기 — 명령 팔레트·리본 메뉴 공용(기존 탭 재사용).
@@ -2696,7 +2788,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
     const existing = this.app.workspace.getLeavesOfType(NOTE_BROWSER_VIEW_TYPE);
     const leaf = existing[0] ?? this.app.workspace.getLeaf("tab");
     await leaf.setViewState({ type: NOTE_BROWSER_VIEW_TYPE, active: true });
-    this.app.workspace.revealLeaf(leaf);
+    await this.app.workspace.revealLeaf(leaf);
   }
 
   dashboardArchiveOn(): boolean { return this.archiveEnabled(); }
@@ -2889,7 +2981,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
     };
     const leaf = this.app.workspace.getLeaf("tab");
     await leaf.setViewState({ type: ARCHIVE_SOURCE_VIEW_TYPE, active: true, state: state as unknown as Record<string, unknown> });
-    this.app.workspace.revealLeaf(leaf);
+    await this.app.workspace.revealLeaf(leaf);
   }
 
   // ── "그날로"(Rewind): 봉인 버전 복원 중앙 로직 ─────────────────────────────
@@ -4084,6 +4176,21 @@ export default class NanalStampPlugin extends RecoveryLayer {
     this.statusEl.setAttribute("aria-label", title);
   }
 
+  /// 지금 활성인 것이 **파일 탭이 아닌가**. 그 하나만 답한다.
+  ///
+  /// 이 목록은 두 번 표류했다 — 2026-07-22 에 브라우저·대시보드를, 2026-07-29 에 업무함을
+  /// 뒤늦게 넣었다. 그 사이 각 탭에는 `getActiveFile()`이 돌려주는 **직전에 열었던 노트**의
+  /// 상태가 남아, 그 탭이 봉인된 것처럼 읽혔다. 목록이 한 곳에 없으면 새 뷰가 생길 때마다
+  /// 같은 잔상 결함이 되살아나므로, 표시(updateActiveStatus)와 클릭이 이 술어를 함께 쓴다.
+  /// 뷰별 **전용 표시**(사본 탭 이름·업무함 요약)는 여기서 다루지 않는다 — 그건 표시의 몫이다.
+  overviewViewActive(): boolean {
+    const w = this.app.workspace;
+    return !!(w.getActiveViewOfType(NoteBrowserView)
+      || w.getActiveViewOfType(DashboardView)
+      || w.getActiveViewOfType(TaskInboxView)
+      || w.getActiveViewOfType(ArchiveSourceView));
+  }
+
   /// 상태바 갱신. 모달·설정탭에서도 부르므로 공개다(private 로 두면 타입 검사가 막는다).
   async updateActiveStatus() {
     this.stopPendingCountdown(); // 대기 카운트다운은 아래 dirty 분기에서만 다시 켠다
@@ -4098,6 +4205,11 @@ export default class NanalStampPlugin extends RecoveryLayer {
     // 범위 미설정 = 봉인이 **멈춰 있는** 상태다. 개요("총 N건")를 보여주면 잘 돌아가는 것처럼 읽히므로
     // 다른 어떤 표시보다 먼저 이걸 말한다(2026-07-28 — 범위 전 자동 봉인을 막으면서 함께 도입).
     if (this.scopeUnset()) return this.setStatus(t.scopeUnsetStatus, t.scopeUnsetTitle, "faded");
+    // 팀 키만 거부 — 개인 봉인은 계속된다. 공용 배지(t.apiKeyRejected)를 쓰면 전체 정지로 읽히므로
+    // 배지 자체를 팀 전용으로 둔다(툴팁이 무엇이 멈췄는지 말한다).
+    // **범위 미설정보다 뒤**다(M-2): 범위가 없으면 개인 봉인도 멈춰 있어 "개인 봉인은 계속됩니다"가
+    // 거짓이 된다 — 더 큰 진실을 먼저 말한다.
+    if (this.teamKeyRejected()) return this.setStatus(t.teamKeyRejectedStatus, t.teamAuthFail);
     // 대조가 오래 못 돌았으면 **그 사실 자체**를 말한다(2026-07-30).
     // "빠진 것이 없다"와 "빠졌는지 모른다"는 다르다 — 후자를 침묵하면 전자로 읽힌다.
     // 범위 미설정과 같은 자리에 두는 이유: 둘 다 "지금 무슨 일이 벌어지는지 모르는" 상태다.
@@ -4112,21 +4224,13 @@ export default class NanalStampPlugin extends RecoveryLayer {
       const n = arch.displayBasename();
       if (n) return this.setStatus(t.statusArchiveTab(n), t.statusArchiveTitle, "faded");
     }
-    // 브라우저·대시보드·업무함 탭도 파일 탭이 아니다 — 특정 노트 상태 대신 계정 요약으로(잔상 혼동 방지).
-    // 업무함이 이 목록에서 빠져 있었다: 업무함을 보는 동안 상태바에 **직전에 열었던 노트**의
-    // "봉인됨 · 앵커 대기"가 남아, 업무함이 봉인된 것처럼 읽혔다(2026-07-29 사용자 지적).
-    // getActiveFile()이 '최근 파일'을 돌려주기 때문으로, 2026-07-22에 브라우저·대시보드에 대해
-    // 고쳤던 것과 같은 원인이다.
     // 업무함은 노트가 아니라 **업무 증적**을 보여준다 — 여기서 회신·완료·수정이 원장에 쌓인다.
     if (this.app.workspace.getActiveViewOfType(TaskInboxView)) {
       const s = this.taskSealSummary;
       if (s) return this.setStatus(t.taskInboxStatus(s.sealed, s.pending), t.taskInboxStatusTitle, "solid");
-      return this.setStatus(t.overview(streak, total), base, "solid");
     }
-    if (this.app.workspace.getActiveViewOfType(NoteBrowserView)
-        || this.app.workspace.getActiveViewOfType(DashboardView)) {
-      return this.setStatus(t.overview(streak, total), base, "solid");
-    }
+    // 전용 표시가 없는 개요 탭은 계정 요약으로 — 특정 노트 상태를 보여주면 잔상이 된다.
+    if (this.overviewViewActive()) return this.setStatus(t.overview(streak, total), base, "solid");
 
     const f = this.app.workspace.getActiveFile();
     if (!f || !this.isSealable(f)) return this.setStatus(t.overview(streak, total), base, "solid");
@@ -4743,8 +4847,8 @@ export default class NanalStampPlugin extends RecoveryLayer {
       // Templater 의 on-create 는 비동기라, 같은 tick(setTimeout 0)에 쓰면 그쪽이 읽을 때
       // 이미 우리 내용이 들어 있어 그대로 실행된다(2026-08-06 실측: 0ms 로는 모달이 그대로 떴다).
       // 실측상 modify 에는 반응하지 않으므로, 빈 내용을 먼저 읽히면 그 뒤는 안전하다.
-      await new Promise((r) => setTimeout(r, NanalStampPlugin.TEMPLATE_SETTLE_MS));
-      if (body) await this.app.vault.modify(f as TFile, body);
+      await new Promise((r) => window.setTimeout(r, NanalStampPlugin.TEMPLATE_SETTLE_MS));
+      if (body) await this.app.vault.modify(f, body);
       return true;
     } catch (_e) {
       return !!this.app.vault.getAbstractFileByPath(path); // 이미 있었으면 만든 것이 아니다
@@ -4957,6 +5061,12 @@ export default class NanalStampPlugin extends RecoveryLayer {
     };
 
     // 봉인이 멈춰 있으면 그것부터 말한다 — 메뉴를 열어도 원인이 안 보이면 사용자는 고장으로 읽는다.
+    // 키 거부는 봉인 정지와 같은 급 — 메뉴를 열면 바로 보이고, 누르면 회복 경로로 간다(P-02).
+    // 상태바와 같은 언어로 — 로그인이 범위보다 먼저다(M-5).
+    if (this.authFailedAny()) {
+      header(t.authFailMenuCat);
+      warnItem(this.authFailed ? t.authFailMenu : t.teamAuthFailMenu, () => this.openOwnSettings(), "key");
+    }
     if (this.scopeUnset()) {
       header(t.scopeUnsetMenuCat);
       item(t.scopeUnsetMenuItem, "folder-tree", () => {
@@ -5022,6 +5132,12 @@ export default class NanalStampPlugin extends RecoveryLayer {
     header(t.menuCatStorage);
     item(t.browserCmd, "list-ordered", () => void this.openNoteBrowser());
     item(t.nanalRestoreCmd, "archive-restore", () => void this.restoreFromNanal());
+    // 데이터를 잃은 순간의 두 해법이 리본에 없었다(P-06) — 팔레트 전용이던 진입점을 상시 노출한다.
+    // 부르는 함수는 명령 등록부(rewind-find-deleted·restore-vault)와 같은 것이다.
+    if (Platform.isDesktopApp) {  // 로컬 git 아카이브 기반 — 명령의 checkCallback 가드와 같은 판정
+      item(t.rewindFindCmd, "history", () => void this.findDeletedNotes());
+    }
+    item(t.restoreVaultCmd, "folder-sync", () => new RestoreVaultModal(this.app, this).open());
     const openRecovery = (): void => {
       if (!this.settings.apiKey) return void new Notice(t.apiKeyMissing);
       new StorageRecoveryModal(this.app, this).open();
@@ -5038,14 +5154,15 @@ export default class NanalStampPlugin extends RecoveryLayer {
     if (dmiss) item(t.digestMissingMenu(periodLabel(dmiss)), "calendar-check", () => void this.createDigest(dmiss));
 
     header(t.menuCatAccount);
+    // 계정이 없으면 요금제·내 계정보다 로그인이 먼저다 — 미로그인 사용자의 리본 유일 입구.
+    if (!this.settings.apiKey) item(t.loginMenu, "log-in", () => this.openOwnSettings());
     item(t.pricingCmd, "credit-card", () => this.openExternal("/pricing"));
     // 막힌 것이 있으면 메뉴 맨 위에 — 배지는 "무언가 있다"만 말하고, 무엇인지는 여기서 본다.
     const holds = Object.entries(this.settings.sealHolds ?? {});
     if (holds.length > 0) {
       warnItem(t.holdMenu(holds.length), () => {
-        const lines = holds.map(([notePath, h]) => h.kind === "attach"
-          ? `· ${basenameOf(notePath)} — ${basenameOf(h.path)} ${Math.ceil(h.size / (1024 * 1024))}MB (상한 ${h.limitMB}MB)`
-          : `· ${basenameOf(notePath)} — 보관 용량 부족`);
+        const lines = holds.map(([notePath, h]) => t.holdDetailLine(
+          basenameOf(notePath), h.kind, basenameOf(h.path), Math.ceil(h.size / (1024 * 1024)), h.limitMB));
         new Notice(`${t.holdsTitle(holds.length)}\n${lines.join("\n")}\n\n${t.holdsDesc}`, 20000);
       });
     }
@@ -5181,14 +5298,14 @@ export default class NanalStampPlugin extends RecoveryLayer {
     const existing = this.app.workspace.getLeavesOfType(TASK_INBOX_VIEW_TYPE)
       .find((leaf) => leaf.getRoot() !== this.app.workspace.rootSplit);
     if (existing) {
-      this.app.workspace.revealLeaf(existing);
+      await this.app.workspace.revealLeaf(existing);
       if (existing.view instanceof TaskInboxView) void existing.view.refresh(true);
       return;
     }
     const leaf = this.app.workspace.getRightLeaf(false);
     if (!leaf) return;
     await leaf.setViewState({ type: TASK_INBOX_VIEW_TYPE, active: true });
-    this.app.workspace.revealLeaf(leaf);
+    await this.app.workspace.revealLeaf(leaf);
   }
 
   // §Task 11: 중앙 편집 영역에 같은 뷰(TASK_INBOX_VIEW_TYPE) 새 탭 — 폭이 넓어 표 모드가 자동 적용된다.
@@ -5200,13 +5317,13 @@ export default class NanalStampPlugin extends RecoveryLayer {
     const existing = this.app.workspace.getLeavesOfType(TASK_INBOX_VIEW_TYPE)
       .find((leaf) => leaf.getRoot() === this.app.workspace.rootSplit);
     if (existing) {
-      this.app.workspace.revealLeaf(existing);
+      await this.app.workspace.revealLeaf(existing);
       if (existing.view instanceof TaskInboxView) void existing.view.refresh(true);
       return;
     }
     const leaf = this.app.workspace.getLeaf("tab");
     await leaf.setViewState({ type: TASK_INBOX_VIEW_TYPE, active: true });
-    this.app.workspace.revealLeaf(leaf);
+    await this.app.workspace.revealLeaf(leaf);
   }
 
   // 리본·명령 진입점 — 데스크톱은 중앙 탭(넓은 표)이 기본, 모바일은 중앙도 좁아 무의미하므로 사이드바 카드.

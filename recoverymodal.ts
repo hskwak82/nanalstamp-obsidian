@@ -95,9 +95,7 @@ export class StorageRecoveryModal extends NanalModal {
     if (lost.length === 0) return;
     el.createEl("div", { text: t.recLostHead(lost.length), cls: "nanalstamp-pkg-warn" });
     el.createEl("div", { text: t.recLostWhy, cls: "setting-item-description" });
-    const list = el.createDiv({ cls: "nanalstamp-pkg-preview" });
-    list.style.maxHeight = "220px";
-    list.style.overflowY = "auto";
+    const list = el.createDiv({ cls: "nanalstamp-pkg-preview nanalstamp-rec-lost-list" });
     for (const it of lost) {
       const row = list.createDiv({ cls: "setting-item-description" });
       row.setText(`${it.name ?? t.recLostUnknown(it.seq)} · ${fmtDateTime(new Date(it.at * 1000))}`);

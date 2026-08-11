@@ -11,7 +11,7 @@
 // 기존 ledgerSweep 은 이 구멍을 못 메운다: **현재 파일의 현재 내용**만 보기 때문이다.
 import { Notice, TFile, requestUrl } from "obsidian";
 import { t } from "./i18n";
-import { sha256Hex, sha256HexBytes, hashPath, safeName } from "./pathutil";
+import { sha256Hex, sha256HexBytes, hashPath } from "./pathutil";
 import { isMarkdownPath } from "./sealscope";
 import { PackageLayer } from "./packagelayer";
 

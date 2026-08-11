@@ -41,9 +41,17 @@ export class NanalStampSettingTab extends PluginSettingTab {
     containerEl.empty();
     containerEl.addClass("nanalstamp-settings"); // 카드·배지·고급 접기 스타일(styles.css)
     if (!Platform.isDesktopApp && !this.plugin.settings.mobileEntitled) {
-      const warn = containerEl.createDiv();
-      warn.style.cssText = "padding:10px 12px;margin-bottom:12px;border-radius:8px;background:var(--background-modifier-error-hover);";
+      const warn = containerEl.createDiv({ cls: "nanalstamp-banner-warn" });
       warn.setText(t.mobileSealNeedPlan);
+    }
+    // 키 거부(폐기·만료) — 정상 계정 카드를 그대로 두면 회복 경로가 없다(P-02).
+    // 로그아웃을 강요하지 않는다: 시작 카드의 로그인이 성공하면 accountLogin→saveSettings가
+    // apiKey를 교체하며 authFailed를 스스로 리셋한다(saveSettings의 lastApiKey 감지).
+    if (this.plugin.settings.apiKey && this.plugin.authFailed) {
+      const warn = containerEl.createDiv({ cls: "nanalstamp-banner-warn" });
+      warn.setText(t.authFailedBanner(this.plugin.settings.accountEmail || ""));
+      this.renderStartCard(containerEl, true); // 이메일/비밀번호 + [로그인] — 회복 톤으로 재사용
+      return;
     }
     if (!this.plugin.settings.apiKey) {
       this.renderStartCard(containerEl); // (A) 미로그인 — 이 카드 외에는 아무것도 렌더하지 않는다(언어 포함)
@@ -55,13 +63,19 @@ export class NanalStampSettingTab extends PluginSettingTab {
   }
 
   // (A) 시작 카드: 한 줄 소개 + 이메일/비밀번호 + [가입][로그인] + 재설정 텍스트 링크
-  private renderStartCard(containerEl: HTMLElement) {
+  //
+  // recovery=true 는 **키가 거부돼 다시 로그인하러 온** 사람이다(P-02). 처음 온 사람에게 하는
+  // 환영 인사를 그대로 보여주면 "무엇을 하러 왔는지"와 화면이 어긋난다 — 제목·소개만 바꾼다.
+  // [가입] 버튼은 남긴다: 계정 자체가 사라진 경우 그것이 유일한 탈출구다.
+  private renderStartCard(containerEl: HTMLElement, recovery = false) {
     const card = containerEl.createDiv({ cls: "nanalstamp-card nanalstamp-start-card" });
-    card.createDiv({ cls: "nanalstamp-card-title", text: t.welcomeTitle });
-    card.createEl("p", { text: t.startIntro, cls: "nanalstamp-card-desc" });
+    card.createDiv({ cls: "nanalstamp-card-title", text: recovery ? t.recoveryTitle : t.welcomeTitle });
+    card.createEl("p", { text: recovery ? t.recoveryIntro : t.startIntro, cls: "nanalstamp-card-desc" });
     // 수동 API 키 입력칸은 없음 — 로그인이 키를 자동 발급한다(1차 개편 결정 유지).
     let loginEmail = "", loginPw = "";
     new Setting(card)
+      // 입력 2 + 버튼 2 — 2단이면 라벨 컬럼이 짓눌린다(styles.css nanalstamp-stack).
+      .setClass("nanalstamp-stack")
       .setName(t.loginName)
       .setDesc(t.loginDesc)
       .addText((tx) => tx.setPlaceholder(t.emailPlaceholder).onChange((v) => (loginEmail = v)))
@@ -216,6 +230,11 @@ export class NanalStampSettingTab extends PluginSettingTab {
           : t.teamProfileLastReceived(fmtDateTime(new Date(s.teamProfileUpdatedAt)));
       const row = new Setting(card).setName(t.teamRowName).setDesc(desc);
 
+      // 팀 키가 거부된 상태 — 개인 봉인은 계속되므로 배너로 화면을 갈아끼우지 않고, 무엇이
+      // 멈췄고 어디서 고치는지만 이 자리에서 말한다(P-02).
+      if (this.plugin.teamKeyRejected()) {
+        card.createEl("p", { text: t.teamAuthFailedHint, cls: "nanalstamp-card-desc mod-warning" });
+      }
       // 팀 계정을 따로 쓰는 경우 — 회사 메일과 개인 메일이 다르면 팀 폴더의 기록은
       // 회사 계정으로 가야 소유·회수·과금이 갈린다. **비워 두면 개인 키가 양쪽에 쓰인다**
       // (개인과 팀이 같은 계정인 사람은 아무것도 하지 않아도 된다).
@@ -230,10 +249,17 @@ export class NanalStampSettingTab extends PluginSettingTab {
             new Notice(t.teamKeyUnlinked);
             this.display();
           }));
-      } else {
+      }
+      // 거부된 상태에서는 **다시 연결하는 칸도 함께** 낸다. 연결 해제 버튼만 있으면 위 안내가
+      // 가리킬 곳이 없어(해제부터 해야 폼이 나온다) 개인 카드와 같은 결함이 팀 쪽에 남는다.
+      // 재연결이 성공하면 teamAccountLogin→resetTeamKeyCaches가 teamAuthFailed를 내린다.
+      if (!s.teamApiKey || this.plugin.teamKeyRejected()) {
         let te = "", tp = "";
         new Setting(card)
-          .setName(t.teamKeyName)
+          // 로그인 행과 같은 구성(입력 2 + 버튼 1)에 설명까지 길다 — 라벨을 전폭으로 올린다.
+          .setClass("nanalstamp-stack")
+          // 거부 상태에서는 위의 연결 해제 행과 나란히 서므로 같은 이름이면 둘을 구분할 수 없다.
+          .setName(this.plugin.teamKeyRejected() ? t.teamKeyReconnectName : t.teamKeyName)
           .setDesc(t.teamKeyDesc)
           .addText((tx) => tx.setPlaceholder(t.emailPlaceholder).onChange((v) => (te = v)))
           .addText((tx) => { tx.setPlaceholder(t.pwPlaceholder).onChange((v) => (tp = v));
@@ -366,9 +392,8 @@ export class NanalStampSettingTab extends PluginSettingTab {
         box.createEl("div", { text: t.holdsDesc, cls: "setting-item-description" });
         for (const [notePath, h] of holds) {
           const row = box.createDiv({ cls: "setting-item-description" });
-          row.setText(h.kind === "attach"
-            ? `${notePath} — ${basenameOf(h.path)} ${Math.ceil(h.size / (1024 * 1024))}MB (상한 ${h.limitMB}MB)`
-            : `${notePath} — 보관 용량 부족`);
+          row.setText(t.holdDetailLine(
+            notePath, h.kind, basenameOf(h.path), Math.ceil(h.size / (1024 * 1024)), h.limitMB));
         }
       }
       // 지금 적용 중인 상한을 늘 보이게 — 막힌 뒤에야 알게 되면 늦다.
@@ -394,20 +419,16 @@ export class NanalStampSettingTab extends PluginSettingTab {
         return;
       }
       histBox.createEl("div", { text: t.scopeHistDesc, cls: "setting-item-description" });
-      const tbl = histBox.createEl("table");
-      tbl.style.cssText = "width:100%;border-collapse:collapse;font-size:12px;margin-top:8px";
+      const tbl = histBox.createEl("table", { cls: "nanalstamp-hist-table" });
       const head = tbl.createEl("tr");
       for (const h of [t.scopeHistN, t.scopeHistWhen, t.scopeHistProof, t.scopeHistScope]) {
-        const th = head.createEl("th", { text: h });
-        th.style.cssText = "text-align:left;padding:4px 6px;border-bottom:1px solid var(--background-modifier-border);font-weight:600";
+        head.createEl("th", { text: h });
       }
       // 최신이 위로 — 사람은 "지금 어떤가"를 먼저 본다.
       for (const r of rows.slice().reverse()) {
         const tr = tbl.createEl("tr");
         const td = (txt: string) => {
-          const c = tr.createEl("td", { text: txt });
-          c.style.cssText = "padding:4px 6px;border-bottom:1px solid var(--background-modifier-border);vertical-align:top";
-          return c;
+          return tr.createEl("td", { text: txt });
         };
         td(String(r.n));
         td(new Date(r.at * 1000).toLocaleString("ko-KR"));
@@ -424,13 +445,11 @@ export class NanalStampSettingTab extends PluginSettingTab {
         const exc: string[] = b["제외_폴더"] ?? [];
         cell.createEl("div", { text: inc.length ? inc.join(" · ") : t.scopeHistWhole });
         if (exc.length) cell.createEl("div", { text: t.scopeHistExclude(exc.join(" · ")), cls: "setting-item-description" });
-        const link = cell.createEl("a", { text: t.scopeHistOpen });
-        link.style.cssText = "cursor:pointer;font-size:11px";
+        const link = cell.createEl("a", { text: t.scopeHistOpen, cls: "nanalstamp-hist-open" });
         link.onclick = () => {
           const m = new Modal(this.app);
           m.titleEl.setText(t.scopeHistDocTitle(r.n));
-          const pre = m.contentEl.createEl("pre");
-          pre.style.cssText = "white-space:pre-wrap;font-size:11.5px;max-height:60vh;overflow:auto";
+          const pre = m.contentEl.createEl("pre", { cls: "nanalstamp-doc-pre" });
           pre.setText(JSON.stringify(r.doc, null, 2));
           m.contentEl.createEl("div", { text: t.scopeHistDocNote(r.docHash), cls: "setting-item-description" });
           m.open();
@@ -505,8 +524,7 @@ export class NanalStampSettingTab extends PluginSettingTab {
         });
       if (s.storageBackend === "nanal" || teamNanal) {
         // 켜짐 상세는 같은 항목의 설명 두 번째 문단으로 — 별도 Setting 블록(위쪽 공백) 금지(2026-07-22 사용자 지적).
-        const extra = backendSetting.descEl.createDiv();
-        extra.style.marginTop = "6px";
+        const extra = backendSetting.descEl.createDiv({ cls: "nanalstamp-desc-extra" });
         extra.setText(t.storageNanalDesc);
       }
     }

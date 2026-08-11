@@ -111,7 +111,6 @@ function dueCell(L: PluginI18n, task: UnifiedTask, today: string, bare = false):
 }
 
 // ── 팝오버 모듈 상태 — 한 번에 하나만. repaint는 정렬·필터 라이브 편집 시 결과영역만 다시 그린다. ──
-let openPop: HTMLElement | null = null;
 let popCleanup: (() => void) | null = null;
 let repaint: (() => void) | null = null;
 // export — main.ts onClose에서 leaf 닫힘 시 document capture 리스너 잔존 방지용으로 호출.
@@ -373,7 +372,7 @@ function addResizeHandle(
     e.preventDefault();
     e.stopPropagation(); // th 정렬 핸들러(click) 및 텍스트 선택 억제
     const key = cols[idx].key;
-    const startX = (e as PointerEvent).clientX;
+    const startX = (e).clientX;
     const cwMap = ctx.prefs.colWidths ?? (ctx.prefs.colWidths = {});
     const measured = () => Math.max(RESIZE_MIN_W, Math.round(th.getBoundingClientRect().width));
     const startW = cwMap[key] != null ? cwMap[key] : measured();
@@ -644,7 +643,7 @@ function bindBoardCardDrag(card: HTMLElement, task: UnifiedTask, board: HTMLElem
     card.addClass("is-dragging");
     if (e.dataTransfer) {
       e.dataTransfer.effectAllowed = "move";
-      try { e.dataTransfer.setData("text/plain", task.id); } catch (_e) { /* 일부 환경 setData 실패해도 드래그 계속 */ }
+      try { e.dataTransfer.setData("text/plain", task.id); } catch { /* 일부 환경 setData 실패해도 드래그 계속 */ }
     }
     board.addClass("is-drag-active");
     board.querySelectorAll(".nanalstamp-tv-board-col").forEach((c) => {
@@ -849,17 +848,16 @@ function openFilterPopover(fcol: string, kind: "multi" | "text" | "date", anchor
     // 접근성 — 팝오버 내부에 포커스가 있던 채로 닫히면(Esc·지우기 등) anchor(필터 아이콘)로 복원.
     const restore = pop.contains(document.activeElement);
     pop.remove();
-    if (restore) { try { anchor.focus(); } catch (_) { /* 무시 */ } }
-    openPop = null; popCleanup = null;
+    if (restore) { try { anchor.focus(); } catch { /* 무시 */ } }
+    popCleanup = null;
   };
-  openPop = pop;
 }
 
 function buildMultiPop(pop: HTMLElement, fcol: string, ctx: WorkInboxCtx): void {
   const opts = collectDistinct(ctx.unified, fcol as "status" | "priority" | "project" | "assignee" | "type");
   if (!opts.length) { pop.createSpan({ cls: "nanalstamp-tv-muted", text: ctx.L.filterNone }); return; }
   const field = multiField(fcol);
-  const selected = new Set<string>((ctx.prefs.filters[field] as string[] | undefined) ?? []);
+  const selected = new Set<string>((ctx.prefs.filters[field]) ?? []);
   let first: HTMLInputElement | null = null;
   for (const o of opts) {
     const row = pop.createEl("label", { cls: "nanalstamp-tv-pop-opt" });

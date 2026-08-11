@@ -93,7 +93,7 @@ export abstract class PackageLayer extends ArchiveLayer {
       headers: { "x-nanal-api-key": this.keyFor(chain === "team") },
       throw: false,
     });
-    if (res.status === 402) throw new SubscriptionRequired(res.json?.checkout_url);
+    if (res.status === 402) throw new SubscriptionRequired((res.json as { checkout_url?: string } | null)?.checkout_url);
     if (res.status !== 200) throw new Error(`서버 응답 ${res.status}`);
     return res.json as PackageData;
   }
@@ -114,7 +114,7 @@ export abstract class PackageLayer extends ArchiveLayer {
         if (h.status !== 200) { real.set(a.block_height, null); continue; }
         const b = await requestUrl({
           url: `https://mempool.space/api/block/${h.text.trim()}`, method: "GET", throw: false });
-        real.set(a.block_height, b.status === 200 ? (b.json?.merkle_root ?? null) : null);
+        real.set(a.block_height, b.status === 200 ? ((b.json as { merkle_root?: string } | null)?.merkle_root ?? null) : null);
       } catch {
         real.set(a.block_height, null);
       }
@@ -343,7 +343,7 @@ export abstract class PackageLayer extends ArchiveLayer {
         headers: { "x-nanal-api-key": this.keyFor(this.pkgChain === "team") },
         throw: false,
       });
-      if (res.status === 402) needCredit = new SubscriptionRequired(res.json?.checkout_url);
+      if (res.status === 402) needCredit = new SubscriptionRequired((res.json as { checkout_url?: string } | null)?.checkout_url);
       if (res.status === 200) {
         const pdf = new Uint8Array(res.arrayBuffer);
         push("증명서(요약).pdf", pdf);
@@ -388,7 +388,7 @@ export abstract class PackageLayer extends ArchiveLayer {
     // 불리한 기록을 일부러 뺀 것과 구별할 수 없다(2026-07-30).
     push("증명/_처분내역.txt", dispositionFile(
       chain, plan.atEpoch ?? Math.floor(Date.now() / 1000), data.covered_to,
-      new Set(files.map((f) => f.seq)), plan.reasons ?? new Map()));
+      new Set(files.map((f) => f.seq)), plan.reasons ?? new Map<number, Disposition>()));
     push("증명/_전체체인.json", JSON.stringify({
       "발급": "nanalStamp",
       "사용자ID": data.user_id,
@@ -492,7 +492,7 @@ export abstract class PackageLayer extends ArchiveLayer {
         }),
         throw: false,
       });
-      const seq = res.status === 200 ? res.json?.seq : null;
+      const seq = res.status === 200 ? (res.json as { seq?: number } | null)?.seq : null;
       return typeof seq === "number" ? seq : null;
     } catch {
       return null;

@@ -12,7 +12,6 @@
 import { Notice, TFile, requestUrl } from "obsidian";
 import { t } from "./i18n";
 import { sha256Hex, sha256HexBytes, hashPath } from "./pathutil";
-import { isMarkdownPath } from "./sealscope";
 import { PackageLayer } from "./packagelayer";
 
 export interface MissingItem {
@@ -125,12 +124,13 @@ export abstract class RecoveryLayer extends PackageLayer {
         throw: false,
       });
       if (res.status !== 200) return null;
+      const mj = res.json as { sealed?: number; stored?: number; missing_total?: number; unrecoverable_known?: number; missing?: MissingItem[] } | null;
       return {
-        sealed: res.json?.sealed ?? 0,
-        stored: res.json?.stored ?? 0,
-        total: res.json?.missing_total ?? 0,
-        knownLost: res.json?.unrecoverable_known ?? 0,
-        items: res.json?.missing ?? [],
+        sealed: mj?.sealed ?? 0,
+        stored: mj?.stored ?? 0,
+        total: mj?.missing_total ?? 0,
+        knownLost: mj?.unrecoverable_known ?? 0,
+        items: mj?.missing ?? [],
       };
     } catch {
       return null;
@@ -276,7 +276,7 @@ export abstract class RecoveryLayer extends PackageLayer {
       });
       // 200 만 보고 넘어가지 않는다 — 서버가 **몇 건을 기록했는지**까지 맞아야 성공이다.
       // 200 은 "응답이 왔다"일 뿐 "내가 보낸 것을 그대로 넣었다"가 아니다.
-      const recorded = Number(res.json?.recorded ?? -1);
+      const recorded = Number((res.json as { recorded?: number } | null)?.recorded ?? -1);
       if (res.status !== 200 || recorded !== chunks[i].length) {
         console.warn("[nanalstamp] 되살릴 수 없음 보고 실패", res.status, "기록", recorded, "/", chunks[i].length);
         return;                                  // 서명을 갱신하지 않으므로 다음 점검에 전량 재시도
@@ -318,7 +318,7 @@ export abstract class RecoveryLayer extends PackageLayer {
           headers: { "x-nanal-api-key": key },
           throw: false,
         });
-        if (res.status === 200 && res.json?.found) return JSON.stringify(res.json, null, 2);
+        if (res.status === 200 && (res.json as { found?: boolean } | null)?.found) return JSON.stringify(res.json, null, 2);
       } catch { /* 번들을 못 받아도 원문 복구는 진행한다 */ }
       return null;
     });

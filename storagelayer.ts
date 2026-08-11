@@ -6,7 +6,7 @@ import { t } from "./i18n";
 import { hexToBase64, blobExt, PROOF_EXT, bodyByteSize, storageEndpoint } from "./storagecore";
 import { cdcChunks, nextCut, buildManifest, parseManifest, CHUNK_THRESHOLD, CHUNK_MAX } from "./chunkcore";
 import { encryptBlob, decryptBlob, isEncrypted } from "./cryptocore";
-import { nodeReq, sha256Hex, sha256HexBytes } from "./pathutil";
+import { nodeReq, errMsg, sha256Hex, sha256HexBytes } from "./pathutil";
 import { UPLOAD_CONCURRENCY } from "./constants";
 import { isMarkdownPath } from "./sealscope";
 import { NanalStampBase } from "./pluginbase";
@@ -81,7 +81,7 @@ export abstract class StorageLayer extends NanalStampBase {
         // proof 가 v1 로 떨어진다(조용한 강등이라 아무도 모른다).
         headers: { "x-nanal-api-key": this.keyFor(this.teamBlobFor(file.path)) }, throw: false,
       });
-      if (v2.status === 200 && v2.json?.found) nanalProofBody = JSON.stringify(v2.json, null, 2);
+      if (v2.status === 200 && (v2.json as { found?: boolean } | null)?.found) nanalProofBody = JSON.stringify(v2.json, null, 2);
     } catch { /* v1 폴백 */ }
     const proofHash = await sha256Hex(nanalProofBody);
     if (!(await this.nanalPutBlob(hash, proofHash, PROOF_EXT, "application/json", nanalProofBody, true, this.teamBlobFor(file.path)))) {
@@ -100,7 +100,7 @@ export abstract class StorageLayer extends NanalStampBase {
     const h = nodeReq("crypto").createHash("sha256");
     const fd = fs.openSync(abs, "r");
     try {
-      const buf = Buffer.allocUnsafe(1 << 20);
+      const buf = new Uint8Array(1 << 20);
       let pos = 0, since = 0;
       for (;;) {
         const n = fs.readSync(fd, buf, 0, buf.length, pos);
@@ -202,9 +202,9 @@ export abstract class StorageLayer extends NanalStampBase {
       const { ok: okOriginal, dekMissing } = await this.putOriginalBytes(hash, ext, origBytes, file.path);
       if (!okOriginal) return this.noteOriginalFail(dekMissing, silent, file.path);
       return this.putProofAfterOriginal(file, hash, proofBody, silent);
-    } catch (e: any) {
+    } catch (e) {
       console.error("[nanalstamp] nanal storage error", file.path, e);
-      if (!silent) new Notice(t.nanalMirrorFail(e?.message ?? String(e)));
+      if (!silent) new Notice(t.nanalMirrorFail(errMsg(e)));
       return false;
     } finally {
       this.nanalUploading.delete(file.path);
@@ -223,8 +223,9 @@ export abstract class StorageLayer extends NanalStampBase {
         body: JSON.stringify({ items }),
         throw: false,
       });
-      if (res.status !== 200 || !Array.isArray(res.json?.exists)) return null;
-      return res.json.exists.map((x: any) => x === true);
+      const ej = res.json as { exists?: unknown[] } | null;
+      if (res.status !== 200 || !Array.isArray(ej?.exists)) return null;
+      return ej.exists.map((x) => x === true);
     } catch { return null; }
   }
 
@@ -256,7 +257,7 @@ export abstract class StorageLayer extends NanalStampBase {
         body: JSON.stringify({ sha256, ext }), throw: false,
       });
       if (res.status !== 200) return { ok: false, status: res.status };
-      const dl = await requestUrl({ url: res.json.url, method: "GET", throw: false });
+      const dl = await requestUrl({ url: String((res.json as { url?: string } | null)?.url ?? ""), method: "GET", throw: false });
       if (dl.status !== 200) return { ok: false, status: dl.status };
       return { ok: true, dl, team };
     };
@@ -290,8 +291,8 @@ export abstract class StorageLayer extends NanalStampBase {
       if ((await sha256HexBytes(got.bytes)) !== hash) return { error: t.nanalRestoreBadHash };
       if (isMd) return { data: new TextDecoder().decode(got.bytes) };
       return { data: got.bytes.buffer.slice(got.bytes.byteOffset, got.bytes.byteOffset + got.bytes.byteLength) as ArrayBuffer };
-    } catch (e: any) {
-      return { error: t.nanalRestoreFail(e?.message ?? String(e)) };
+    } catch (e) {
+      return { error: t.nanalRestoreFail(errMsg(e)) };
     }
   }
 
@@ -330,7 +331,7 @@ export abstract class StorageLayer extends NanalStampBase {
         if ((await sha256Hex(text)) !== hash) return { error: t.nanalRestoreBadHash };
         return { data: text };
       }
-      const full = out.buffer as ArrayBuffer;
+      const full = out.buffer;
       if ((await sha256HexBytes(full)) !== hash) return { error: t.nanalRestoreBadHash };
       return { data: full };
     } catch (e: unknown) {
@@ -355,22 +356,31 @@ export abstract class StorageLayer extends NanalStampBase {
   protected async nanalProofAsV1(hash: string): Promise<{ data: string } | { error: string }> {
     const got = await this.nanalDownloadText(hash, PROOF_EXT);
     if ("error" in got) return got;
-    let proof: any;
-    try { proof = JSON.parse(got.text); } catch { return { error: t.nanalRestoreBadHash }; }
+    interface ProofV2 {
+      version?: number;
+      chain_refs?: Array<{ sha256?: unknown }>;
+      tail?: ChainEntry[];
+      anchor?: { head_seq?: number } | null;
+      matched_seq?: number; matched_path?: unknown; issuer?: unknown; file_hash?: unknown;
+      reviews?: unknown[]; pubkey_b64?: unknown;
+    }
+    interface ChainEntry { seq?: number }
+    let proof: ProofV2 | null;
+    try { proof = JSON.parse(got.text) as ProofV2 | null; } catch { return { error: t.nanalRestoreBadHash }; }
     if (proof?.version !== 2) return { data: got.text }; // v1 — 이미 자기완결
-    const entries: any[] = [];
+    const entries: ChainEntry[] = [];
     for (const ref of proof.chain_refs ?? []) {
       const c = await this.nanalDownloadText(String(ref.sha256), "chain");
       if ("error" in c) return c;
       if ((await sha256Hex(c.text)) !== String(ref.sha256)) return { error: t.nanalRestoreBadHash };
-      try { entries.push(...JSON.parse(c.text)); } catch { return { error: t.nanalRestoreBadHash }; }
+      try { entries.push(...(JSON.parse(c.text) as ChainEntry[])); } catch { return { error: t.nanalRestoreBadHash }; }
     }
     entries.push(...(proof.tail ?? []));
     const headSeq: number = typeof proof.anchor?.head_seq === "number" ? proof.anchor.head_seq : Number.MAX_SAFE_INTEGER;
     const matched: number = typeof proof.matched_seq === "number" ? proof.matched_seq : 0;
     const segment = entries
       .filter((e) => typeof e?.seq === "number" && e.seq >= matched && e.seq <= headSeq)
-      .sort((a, b) => a.seq - b.seq);
+      .sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
     const v1 = {
       version: 1, found: true, issuer: proof.issuer ?? "nanalStamp",
       file_hash: proof.file_hash, matched_seq: proof.matched_seq, matched_path: proof.matched_path,
@@ -418,10 +428,11 @@ export abstract class StorageLayer extends NanalStampBase {
     // **presign 응답만** 본다: 아래 PUT 은 S3 presigned URL 이라 403 이 서명·만료 문제일 수 있고,
     // 그것으로 키를 죽이면 멀쩡한 계정의 보관이 통째로 멈춘다.
     if (pre.status === 401 || pre.status === 403) { this.markAuthFailed(team); return false; }
-    if (pre.status !== 200) { console.error("[nanalstamp] storage presign", pre.status, pre.json?.error ?? ""); return false; }
-    if (pre.json?.exists) return true; // 이미 저장됨(콘텐츠주소 중복제거)
+    const prej = pre.json as { error?: unknown; exists?: boolean; url?: string } | null;
+    if (pre.status !== 200) { console.error("[nanalstamp] storage presign", pre.status, prej?.error ?? ""); return false; }
+    if (prej?.exists) return true; // 이미 저장됨(콘텐츠주소 중복제거)
     const put = await this.requestWithOneRetry(() => requestUrl({
-      url: pre.json.url,
+      url: String(prej?.url ?? ""),
       method: "PUT",
       headers: { "content-type": contentType, "x-amz-checksum-sha256": hexToBase64(encSha256 ?? blobHash) },
       body,
@@ -476,7 +487,7 @@ export abstract class StorageLayer extends NanalStampBase {
       }
       const partCount = hashes.length;
       // 존재 일괄 확인(서버 상한 50/호출) — 있는 조각은 업로드·쿼터 0
-      const have: boolean[] = new Array(partCount).fill(false);
+      const have: boolean[] = new Array<boolean>(partCount).fill(false);
       for (let i = 0; i < hashes.length; i += 50) {
         const res = await this.nanalExists(hashes.slice(i, i + 50).map((h) => ({ sha256: h, ext: "chunk" })), team);
         if (res) for (let j = 0; j < res.length; j++) have[i + j] = res[j];
@@ -485,7 +496,7 @@ export abstract class StorageLayer extends NanalStampBase {
       // 업로드는 UPLOAD_CONCURRENCY(3)개 제한 병렬: 인덱스 공유 워커 풀 — 각 워커가 다음 조각을 집어
       // 암호화(경량 CPU)→업로드. 조각 하나라도 최종 실패면 failed를 세워 새 조각을 집지 않고 전체 false
       // (manifest는 전 조각 성공 후에만 — 기존 시맨틱 유지. 이미 올라간 조각은 다음 재시도의 exists가 스킵).
-      const encMeta: { chash: string; csize: number }[] = new Array(partCount);
+      const encMeta: { chash: string; csize: number }[] = new Array<{ chash: string; csize: number }>(partCount);
       const toUpload = have.reduce((n, h) => n + (h ? 0 : 1), 0);
       let uploaded = 0;
       if (toUpload > 0) this.setUploadProgress({ path, done: 0, total: toUpload });
@@ -536,7 +547,7 @@ export abstract class StorageLayer extends NanalStampBase {
     const plan: Array<{ hash: string; size: number; off: number }> = [];
     const fd = fs.openSync(abs, "r");
     try {
-      const buf = Buffer.allocUnsafe(CHUNK_MAX);
+      const buf = new Uint8Array(CHUNK_MAX);
       let filled = 0, pos = 0, off = 0;
       for (;;) {
         // nextCut 의 계약: CHUNK_MAX 까지 채우거나 파일 끝이어야 한다.
@@ -563,7 +574,7 @@ export abstract class StorageLayer extends NanalStampBase {
     const fs = nodeReq("fs");
     const fd = fs.openSync(abs, "r");
     try {
-      const b = Buffer.allocUnsafe(len);
+      const b = new Uint8Array(len);
       let got = 0;
       while (got < len) {
         const n = fs.readSync(fd, b, got, len - got, off + got);

@@ -72,7 +72,7 @@ export function buildManifest(chunks: ManifestChunk[], totalSize: number, enc = 
  * 교차 불변식: enc=1이면 모든 청크에 유효한 chash·csize가 있어야 한다(v2 계약 — 복호 경로가 청크별 재확인 불필요). */
 export function parseManifest(raw: string): { totalSize: number; chunks: ManifestChunk[]; enc: boolean } | null {
   try {
-    const j = JSON.parse(raw);
+    const j = JSON.parse(raw) as { version?: number; chunks?: unknown[]; total_size?: number; enc?: number } | null;
     if (j?.version !== 1 || !Array.isArray(j.chunks) || typeof j.total_size !== "number") return null;
     if (!Number.isSafeInteger(j.total_size) || j.total_size <= 0) return null;
     const enc = j.enc === 1;

@@ -227,7 +227,7 @@
 }
 .nanalstamp-tip.is-shown { display: block; }
 .nanalstamp-dash-funnel .fk.is-click { cursor: pointer; }
-.nanalstamp-dash-funnel .fk.is-click:hover { text-decoration: underline dotted; color: var(--text-normal); }
+.nanalstamp-dash-funnel .fk.is-click:hover { border-bottom: 1px dotted currentColor; color: var(--text-normal); }
 .nanalstamp-dash-funnel .fden { color: var(--text-faint); font-size: 0.85em; font-weight: 400; }
 .nanalstamp-dash-funnel .fextra { color: var(--text-faint); font-size: 0.82em; }
 .nanalstamp-dash-funnel .flife { margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--ns-track); color: var(--text-muted); font-size: 0.82em; }
@@ -638,7 +638,7 @@ body.nanalstamp-col-resizing, body.nanalstamp-col-resizing * { cursor: col-resiz
    행 전체가 <label>이라 어디를 눌러도 체크박스가 토글된다(접근성: 체크박스에 이름이 붙는다).
    인라인 스타일을 여기로 모은 것 — 2026-07-25. */
 .nanalstamp-fc-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--background-modifier-border); cursor: pointer; }
-.nanalstamp-fc-row:has(input:disabled) { cursor: default; }
+.nanalstamp-fc-row.is-locked { cursor: default; }
 .nanalstamp-fc-label { flex: 1; min-width: 0; }
 .nanalstamp-fc-sub { font-size: 0.8em; color: var(--text-muted); }
 .nanalstamp-fc-badge { font-size: 0.85em; color: var(--text-normal); }
@@ -897,14 +897,11 @@ body.nanalstamp-col-resizing, body.nanalstamp-col-resizing * { cursor: col-resiz
 }
 
 /* 입력이 든 항목은 2단을 풀고 세로로 — 라벨·설명 위, 입력은 전폭 아래. */
-.nanalstamp-modal-container .setting-item:has(textarea),
 .nanalstamp-modal-container .setting-item.nanalstamp-m-stack {
   display: block;
   padding: 12px 0;
 }
-.nanalstamp-modal-container .setting-item:has(textarea) .setting-item-info,
 .nanalstamp-modal-container .setting-item.nanalstamp-m-stack .setting-item-info { margin-right: 0; }
-.nanalstamp-modal-container .setting-item:has(textarea) .setting-item-control,
 .nanalstamp-modal-container .setting-item.nanalstamp-m-stack .setting-item-control {
   width: 100%;
   justify-content: flex-start;
@@ -1189,7 +1186,7 @@ body.nanalstamp-col-resizing, body.nanalstamp-col-resizing * { cursor: col-resiz
 
 /* GitHub 기기 인증 코드 — 크게·읽기 쉽게·통째 선택 */
 .nanalstamp-gh-code {
-  font-family: ui-monospace, Menlo, monospace;
+  font-family: var(--font-monospace, monospace);
   font-size: 2.2rem;
   font-weight: 700;
   letter-spacing: 0.25em;

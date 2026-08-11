@@ -36,7 +36,7 @@ No third-party analytics, tracking, or telemetry — ever. These are **all** the
 | `github.com` / `api.github.com` | Only if you connect the optional **GitHub offsite archive** | Your original files, pushed to **your own** GitHub repository with a token you authorize (device flow; token stored locally) |
 | `nanalstamp.com` | Pricing/account/checkout links | Opened in your external browser — the plugin itself sends nothing |
 
-The API server URL is configurable in settings (advanced — staging/proxy setups).
+The API host is fixed to `api.nanalstamp.com` — there is no setting that redirects your data anywhere else.
 
 **During sealing — the default, always-on activity — what leaves your device is:**
 - The **SHA-256 hash of the note's content** (a 64-character digest — the content cannot be reconstructed from it).
@@ -50,7 +50,7 @@ The API server URL is configurable in settings (advanced — staging/proxy setup
 - When you explicitly run a command (issue certificate, create public link, anchor now, build a submission package, open pricing/account).
 - When you quit Obsidian with an unsent seal pending, the final seal goes out via `navigator.sendBeacon` — the only delivery that reliably completes during app shutdown. Same single API host, hash-only payload; this is a seal, not analytics (the plugin has no analytics at all).
 
-You can turn all sending off at any time with **Settings → nanalStamp → Enable sealing**, and you can limit *which* notes are watched with the include/exclude folder settings.
+You can stop all sending at any time by disabling the plugin (**Settings → Community plugins → nanalStamp**), and you can limit *which* notes are watched with the include/exclude folder settings.
 
 ## Account & payment (optional)
 
@@ -86,21 +86,24 @@ You can turn all sending off at any time with **Settings → nanalStamp → Enab
 
 | Setting | Purpose |
 |---|---|
-| Enable sealing | Master on/off for all sending. |
-| API key | Your nanalStamp key. |
-| Include / Exclude folders | Limit which notes are watched. |
-| Settle debounce (ms) | Idle time before a note is treated as "paused". |
-| Min interval per note (ms) | Rate-limit seals per note (edits are coalesced). |
-| Retry interval (ms) | How often failed sends are retried. |
-| Server URL | Advanced — staging/proxy setups only. |
+| Account / API key | Sign in to fetch your key automatically, or paste it. An optional separate team account can be connected for team folders. |
+| Sealing scope | Include / exclude folders, whole-vault mode, and whether attachments are sealed. |
+| Attachment size limit | Shown per plan; oversized attachments are held instead of sealed. |
+| Work inbox | Optional team task inbox with system notifications. |
+| Storage | Original-file storage backend and the local archive folder (a git repository outside your vault). |
+| Proof ledger & backfill | Where verified proof bundles are written, and catch-up sealing for notes edited before install. |
+| GitHub export (advanced) | Optional offsite copy of originals to your own repository. |
+| Templates · language | Note/digest templates, their folders, and UI language. |
+
+Sealing timing is automatic and not configurable: a note is sealed about 5 seconds after you stop typing, at most once per 5 minutes per note, and failed sends are retried every 30 seconds.
 
 ## Desktop only (for now)
 
 nanalStamp is currently **desktop-only**. The local original archive keeps a git repository outside your vault, which needs desktop filesystem access. Mobile support is planned for a future release, once it has been validated as thoroughly as the desktop experience.
 
-## Advanced: Server URL
+## Independent verification
 
-The **Server URL** setting exists for staging and proxy setups. Verification never requires trusting this server: proofs are independently checkable with the downloadable verifier, standard tools (`sha256sum`, OpenTimestamps clients), or the public `/check` page.
+Verification never requires trusting the nanalStamp server: proofs are independently checkable with the downloadable verifier, standard tools (`sha256sum`, OpenTimestamps clients), or the public `/check` page.
 
 ## License
 
@@ -112,7 +115,7 @@ The **Server URL** setting exists for staging and proxy setups. Verification nev
 
 nanalStamp은 선택한 노트가 정착될 때 **기기에서 SHA-256 해시를 계산**해 그 해시만 보냅니다. 기본 동작(봉인)에서 접속하는 곳은 `https://api.nanalstamp.com` 하나이고, 제3자 분석·추적·텔레메트리는 일절 없습니다. **봉인에서는 노트 내용도, 읽을 수 있는 파일·폴더 이름도 전송되지 않습니다**(경로도 해시화). 원문이 올라가는 것은 사용자가 켠 보관 기능뿐입니다 — 유료 원문 보관은 **기기에서 암호화 후** 같은 API로, 선택형 GitHub 오프사이트 보관은 **본인 GitHub 저장소**로 갑니다. 제출 패키지를 만들 때는 앵커 검증을 위해 mempool.space 에 블록 번호(증명에 이미 든 공개 숫자)만 조회합니다. 서버는 해시를 체인으로 묶고 Ed25519로 서명한 뒤 주기적으로 **비트코인(OpenTimestamps)** 에 앵커링해, "그 시점에 그 노트가 존재했다"를 서버를 신뢰하지 않고도 검증할 수 있게 합니다.
 
-- 전송 중단: 설정 → nanalStamp → 봉인 켜기 끄기
+- 전송 중단: 설정 → 커뮤니티 플러그인에서 nanalStamp 비활성화
 - 감시 범위 제한: 포함/제외 폴더 설정
 - 인증서(PDF)·공개 검증 링크는 유료이며 외부 결제 페이지가 브라우저에서 열립니다(Obsidian 내 결제 없음).
 

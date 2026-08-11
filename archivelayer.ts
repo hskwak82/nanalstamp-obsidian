@@ -5,8 +5,7 @@
 import { FileSystemAdapter, Notice, Platform, TFile } from "obsidian";
 import * as git from "isomorphic-git";
 import { t } from "./i18n";
-import { fmtDateTime } from "./fmtutil";
-import { nodeReq, sha256HexBytes, basenameOf, safeName, hashPath } from "./pathutil";
+import { nodeReq, errMsg, sha256HexBytes, basenameOf, safeName, hashPath, NodeFs, NodePath } from "./pathutil";
 import { REWIND_LOG_TTL_MS, ARCHIVE_INLINE_MAX, ARCHIVE_REF_EXT } from "./constants";
 import { blobExt, restoredPath } from "./storagecore";
 import { ArchiveVersionModal, AttachmentVersionModal } from "./modals";
@@ -137,7 +136,7 @@ export abstract class ArchiveLayer extends StorageLayer {
       // .md는 notes/<safe>.md(텍스트), 첨부는 attachments/<safe>(원바이트, safe에 실제 확장자 포함).
       let ignoreAdded = false;
       const fromFile = typeof content === "object" && content !== null && "copyFrom" in content;
-      const src = fromFile ? (content as { copyFrom: string; size: number; hash: string }) : null;
+      const src = fromFile ? content : null;
       const isBin = fromFile || typeof content !== "string";
       const asRef = !!src && src.size > ARCHIVE_INLINE_MAX;
       const contentRel = !isBin ? `notes/${safe}.md`
@@ -161,7 +160,7 @@ export abstract class ArchiveLayer extends StorageLayer {
       } else if (src) {
         fs.copyFileSync(src.copyFrom, path.join(dir, contentRel));
       } else if (isBin) fs.writeFileSync(path.join(dir, contentRel), new Uint8Array(content as ArrayBuffer));
-      else fs.writeFileSync(path.join(dir, contentRel), content as string, "utf8");
+      else fs.writeFileSync(path.join(dir, contentRel), content, "utf8");
       fs.writeFileSync(path.join(dir, proofRel), proofBody, "utf8");
       await git.add({ fs, dir, filepath: contentRel, cache: this.gitCache });
       await git.add({ fs, dir, filepath: proofRel, cache: this.gitCache });
@@ -237,7 +236,7 @@ export abstract class ArchiveLayer extends StorageLayer {
       const fs = nodeReq("fs");
       const path = nodeReq("path");
       if (!fs.existsSync(path.join(dir, ".git"))) return [];
-      let commits: any[] = [];
+      let commits: git.ReadCommitResult[] = [];
       try { commits = await git.log({ fs, dir, cache: this.gitCache }); } catch { return []; }
       const out: ArchiveEntry[] = [];
       for (const c of commits) {
@@ -316,7 +315,7 @@ export abstract class ArchiveLayer extends StorageLayer {
       if (!fs.existsSync(path.join(dir, ".git"))) return; // 아카이브는 첫 봉인 때 init — 그 전이면 다음 기회에
       const rel = "lineage.json";
       let fileMap: Record<string, string> = {};
-      try { fileMap = JSON.parse(fs.readFileSync(path.join(dir, rel), "utf8")); } catch { /* 없음·손상 → 빈 것으로 */ }
+      try { fileMap = JSON.parse(fs.readFileSync(path.join(dir, rel), "utf8")) as Record<string, string>; } catch { /* 없음·손상 → 빈 것으로 */ }
       let settingsChanged = false;
       for (const [k, v] of Object.entries(fileMap)) {
         if (typeof v !== "string") continue;
@@ -344,7 +343,7 @@ export abstract class ArchiveLayer extends StorageLayer {
       const fs = nodeReq("fs");
       const path = nodeReq("path");
       if (!fs.existsSync(path.join(dir, ".git"))) return [];
-      let commits: any[] = [];
+      let commits: git.ReadCommitResult[] = [];
       try { commits = await git.log({ fs, dir, cache: this.gitCache }); } catch { return []; }
       const out: RewindEntry[] = [];
       for (const c of commits) {
@@ -406,7 +405,7 @@ export abstract class ArchiveLayer extends StorageLayer {
       const fs = nodeReq("fs");
       const path = nodeReq("path");
       if (!fs.existsSync(path.join(dir, ".git"))) return [];
-      let commits: any[] = [];
+      let commits: git.ReadCommitResult[] = [];
       try { commits = await git.log({ fs, dir, filepath: rel, cache: this.gitCache }); }
       catch { return []; } // 이 파일이 아카이브에 없으면 log가 throw → 버전 없음
       return commits.map((c) => {
@@ -455,19 +454,19 @@ export abstract class ArchiveLayer extends StorageLayer {
   private blobIndex: { head: string | null; map: Record<string, string> } | null = null;
 
   private async ensureBlobIndex(
-    dir: string, fs: any, path: any, onProgress?: (done: number, total: number) => void,
+    dir: string, fs: NodeFs, path: NodePath, onProgress?: (done: number, total: number) => void,
   ): Promise<Record<string, string>> {
     const file = path.join(dir, ".git", "nanal-blobindex.json");
     if (!this.blobIndex) {
       try {
-        const j = JSON.parse(fs.readFileSync(file, "utf8"));
+        const j = JSON.parse(fs.readFileSync(file, "utf8")) as { v?: number; head?: string | null; map?: Record<string, string> } | null;
         if (j && j.v === 1 && j.map) this.blobIndex = { head: j.head ?? null, map: j.map };
       } catch { /* 없거나 손상 — 새로 만든다 */ }
     }
     let idx = this.blobIndex ?? { head: null, map: {} };
     const cache = this.gitCache;   // 공유 캐시 — 위 주석 참조
     let commits: Array<{ oid: string; commit?: { message?: string } }> = [];
-    try { commits = await git.log({ fs, dir, cache }) as any; } catch { return idx.map; }
+    try { commits = await git.log({ fs, dir, cache }); } catch { return idx.map; }
     if (commits.length === 0) return idx.map;
     if (idx.head === commits[0].oid) return idx.map;   // 새 커밋 없음
 
@@ -492,7 +491,7 @@ export abstract class ArchiveLayer extends StorageLayer {
         rels = [isMarkdownPath(notePath) ? `notes/${safe}.md` : `attachments/${safe}`];
       } else {
         try {
-          rels = (await git.listFiles({ fs, dir, ref: fresh[i].oid, cache }) as string[])
+          rels = (await git.listFiles({ fs, dir, ref: fresh[i].oid, cache }))
             .filter((r) => r.startsWith("notes/") || r.startsWith("attachments/"));
         } catch { continue; }
       }
@@ -500,7 +499,7 @@ export abstract class ArchiveLayer extends StorageLayer {
         let blob: Uint8Array; let oid: string;
         try {
           const r = await git.readBlob({ fs, dir, oid: fresh[i].oid, filepath: rel, cache });
-          blob = r.blob as Uint8Array; oid = r.oid;
+          blob = r.blob; oid = r.oid;
         } catch { continue; }
         if (rel.endsWith(ARCHIVE_REF_EXT)) continue;   // 포인터의 해시는 원본 해시가 아니다 — blobs/ 로 직접 찾는다
         if (seen.has(oid)) continue;
@@ -544,7 +543,7 @@ export abstract class ArchiveLayer extends StorageLayer {
         if (!oid) continue;
         try {
           const { blob } = await git.readBlob({ fs, dir, oid, cache: this.gitCache });
-          found.set(h, blob as Uint8Array);
+          found.set(h, blob);
         } catch { /* 오브젝트가 사라졌다면 없는 것으로 */ }
       }
       return found;
@@ -609,8 +608,8 @@ export abstract class ArchiveLayer extends StorageLayer {
       const fs = nodeReq("fs");
       const path = nodeReq("path");
       if (!fs.existsSync(path.join(dir, ".git"))) return out;
-      let commits: Array<{ commit?: { message?: string } }> = [];
-      try { commits = await git.log({ fs, dir, cache: this.gitCache }) as any; } catch { return out; }
+      let commits: git.ReadCommitResult[] = [];
+      try { commits = await git.log({ fs, dir, cache: this.gitCache }); } catch { return out; }
       const paths = new Set<string>();
       for (const c of commits) {
         const np = archiveNotePath(c.commit?.message ?? "");
@@ -623,7 +622,7 @@ export abstract class ArchiveLayer extends StorageLayer {
 
   /// blobs/ 는 git 이 추적하지 않는다 — 내용주소 저장소이고, 커밋되는 것은 포인터뿐이다.
   /// 새로 쓰거나 고쳤으면 true — 호출부가 이 파일도 커밋에 담는다.
-  protected ensureArchiveIgnore(dir: string, fs: any, path: any): boolean {
+  protected ensureArchiveIgnore(dir: string, fs: NodeFs, path: NodePath): boolean {
     const p = path.join(dir, ".gitignore");
     try {
       const cur = fs.existsSync(p) ? fs.readFileSync(p, "utf8") : "";
@@ -644,19 +643,20 @@ export abstract class ArchiveLayer extends StorageLayer {
       const path = nodeReq("path");
       try {
         const { blob } = await git.readBlob({ fs, dir, oid, filepath: rel, cache: this.gitCache });
-        return blob as Uint8Array;
+        return blob;
       } catch { /* 포인터일 수 있다 */ }
       try {
         const { blob } = await git.readBlob({ fs, dir, oid, filepath: rel + ARCHIVE_REF_EXT, cache: this.gitCache });
-        const ref = JSON.parse(new TextDecoder().decode(blob as Uint8Array));
+        const ref = JSON.parse(new TextDecoder().decode(blob)) as { v?: number; sha256?: string } | null;
         if (ref?.v !== 1 || !/^[0-9a-f]{64}$/.test(ref.sha256 ?? "")) return null;
-        const bytes = new Uint8Array(fs.readFileSync(path.join(dir, "blobs", ref.sha256)));
+        const refSha = ref.sha256 ?? "";
+        const bytes = new Uint8Array(fs.readFileSync(path.join(dir, "blobs", refSha)));
         // **반드시 확인한다.** 포인터는 이력(커밋)이 지켜 주지만 blobs/ 는 git 밖의 평범한 파일이라
         // 누군가 같은 이름에 다른 내용을 덮어쓸 수 있다. 이름이 곧 해시이므로 대조하면 즉시 드러난다 —
         // 확인하지 않으면 바뀐 내용이 "그 시점 원본"인 척 조용히 통과한다(2026-07-30 사용자 지적).
         // 봉인 자체는 무사하다: 진위의 근거는 비트코인에 앵커된 해시이고, 여기서 걸리는 것은 사본 손상이다.
-        if (await sha256HexBytes(bytes) !== ref.sha256) {
-          console.error("[nanalstamp] archive blob corrupted", ref.sha256);
+        if (await sha256HexBytes(bytes) !== refSha) {
+          console.error("[nanalstamp] archive blob corrupted", refSha);
           return null;
         }
         return bytes;
@@ -665,12 +665,12 @@ export abstract class ArchiveLayer extends StorageLayer {
   }
 
   // 한 버전의 원문 + 증명을 아카이브에서 읽어온다. 둘 중 하나라도 없으면 null.
-  async readArchivedVersion(oid: string, safe: string): Promise<{ note: string; proofRaw: string; proof: any } | null> {
+  async readArchivedVersion(oid: string, safe: string): Promise<{ note: string; proofRaw: string; proof: import("./main").ArchivedProof | null } | null> {
     const note = await this.archiveReadBlob(oid, `notes/${safe}.md`);
     const proofRaw = await this.archiveReadBlob(oid, `proofs/${safe}.nanalproof`);
     if (note == null || proofRaw == null) return null;
-    let proof: any = null;
-    try { proof = JSON.parse(proofRaw); } catch { /* 손상된 proof여도 note 해시 표시는 가능 */ }
+    let proof: import("./main").ArchivedProof | null = null;
+    try { proof = JSON.parse(proofRaw) as import("./main").ArchivedProof; } catch { /* 손상된 proof여도 note 해시 표시는 가능 */ }
     return { note, proofRaw, proof };
   }
 
@@ -765,8 +765,8 @@ export abstract class ArchiveLayer extends StorageLayer {
       const okProof = await this.githubPut(proofPath, proofBody, msg);
       if (okNote && okProof) { if (!silent) new Notice(t.mirrorOk(this.settings.githubRepo)); return true; }
       return false; // 부분 실패 → mirrorIndex 미갱신, 다음 sweep에서 재시도
-    } catch (e: any) {
-      new Notice(t.mirrorFail(e?.message ?? String(e)));
+    } catch (e) {
+      new Notice(t.mirrorFail(errMsg(e)));
       console.error("[nanalstamp] github mirror error", file.path, e);
       return false;
     }

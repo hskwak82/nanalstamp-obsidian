@@ -7,7 +7,7 @@ import { App, FuzzySuggestModal, Notice, Platform, Setting, TFile, requestUrl } 
 import { NanalModal } from "./modalbase";
 import { t, reviewVerdictLabel } from "./i18n";
 import { fmtDate, fmtDateTime, fmtUtc } from "./fmtutil";
-import { nodeReq, sha256Hex, sha256HexBytes, basenameOf, safeName, defaultArchivePathSafe } from "./pathutil";
+import { nodeReq, errMsg, sha256Hex, sha256HexBytes, basenameOf, safeName, defaultArchivePathSafe } from "./pathutil";
 import { GITHUB_OAUTH_CLIENT_ID, GITHUB_DEFAULT_REPO } from "./constants";
 import type NanalStampPlugin from "./main";
 import { isMarkdownPath } from "./sealscope";
@@ -33,7 +33,7 @@ export class ProofModal extends NanalModal {
     // 고정 헤더 — 스크롤과 무관하게 항상 상단
     const header = contentEl.createDiv({ cls: "nanalstamp-proof-header" });
     header.createEl("h2", { text: t.proofTitle });
-    header.createEl("div", { text: this.file.basename, cls: "nanalstamp-proof-file" });
+    header.createDiv({ text: this.file.basename, cls: "nanalstamp-proof-file" });
     // 스크롤 본문
     const body = contentEl.createDiv({ cls: "nanalstamp-proof-body" });
     body.createEl("p", { text: t.proofChecking, cls: "setting-item-description" });
@@ -41,7 +41,7 @@ export class ProofModal extends NanalModal {
     const info = await this.plugin.proofFor(this.file);
     body.empty();
 
-    const head = body.createEl("div", { cls: `nanalstamp-proof-chip is-${info.status}` });
+    const head = body.createDiv({ cls: `nanalstamp-proof-chip is-${info.status}` });
     switch (info.status) {
       case "sealed": head.setText(t.proofSealedHead); break;
       case "changed": head.setText(t.proofChangedHead); break;
@@ -92,7 +92,7 @@ export class ProofModal extends NanalModal {
       body.createEl("p", { text: t.reviewSectionTitle, cls: "setting-item-name" });
       for (const r of reviews) {
         if (r.status === "signed") {
-          const when = fmtUtc(r.reviewed_at);
+          const when = fmtUtc(r.reviewed_at ?? 0);
           body.createEl("p", { text: t.reviewSigned(reviewVerdictLabel(r.statement ?? ""), r.reviewer_email || "—", when) });
         } else if (r.status === "pending") {
           body.createEl("p", { text: t.reviewPending, cls: "setting-item-description" });
@@ -117,7 +117,7 @@ export class ProofModal extends NanalModal {
       act(t.pkgCmd, () => { this.close(); this.plugin.openSubmissionPackage(); });
     }
 
-    const histHost = body.createEl("div");
+    const histHost = body.createDiv();
 
     void this.appendHistory(histHost);
   }
@@ -141,9 +141,9 @@ export class ProofModal extends NanalModal {
 
     host.createEl("hr");
     host.createEl("p", { text: t.histSectionTitle(first.total ?? first.rows.length), cls: "setting-item-name" });
-    const scroller = host.createEl("div", { cls: "nanalstamp-hist-scroll" });
-    const rowsHost = scroller.createEl("div");
-    const sentinel = scroller.createEl("div", { cls: "nanalstamp-hist-sentinel" });
+    const scroller = host.createDiv({ cls: "nanalstamp-hist-scroll" });
+    const rowsHost = scroller.createDiv();
+    const sentinel = scroller.createDiv({ cls: "nanalstamp-hist-sentinel" });
 
     // B: '원문 보기'를 저장처별 버튼으로 — 실제 저장된 곳만 노출한다.
     // 로컬(git 아카이브 seq 대응 커밋) / GitHub(현재 미러본과 해시 일치 시) / nanalStamp(존재 일괄 확인 후 비동기 추가).
@@ -253,7 +253,7 @@ export class ProofModal extends NanalModal {
     };
 
     // 스크롤은 이제 본문(.nanalstamp-proof-body)이 담당 — sentinel 관측 root 를 그 스크롤 컨테이너로.
-    const scrollRoot = host.closest(".nanalstamp-proof-body") as HTMLElement | null;
+    const scrollRoot = host.closest(".nanalstamp-proof-body");
     this.histObserver = new IntersectionObserver((entries) => {
       for (const e of entries) if (e.isIntersecting) void loadNext();
     }, { root: scrollRoot });
@@ -298,7 +298,7 @@ export class ArchiveVersionModal extends NanalModal {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.createEl("h2", { text: this.titleText });
-    contentEl.createEl("div", { text: basenameOf(this.notePath), cls: "setting-item-name" });
+    contentEl.createDiv({ text: basenameOf(this.notePath), cls: "setting-item-name" });
     contentEl.createEl("p", { text: this.pickText, cls: "setting-item-description" });
     for (const ver of this.versions) {
       const when = fmtDateTime(new Date(ver.ts * 1000));
@@ -325,7 +325,7 @@ export class ArchiveVersionModal extends NanalModal {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.createEl("h2", { text: this.titleText });
-    contentEl.createEl("div", { text: basenameOf(this.notePath), cls: "setting-item-name" });
+    contentEl.createDiv({ text: basenameOf(this.notePath), cls: "setting-item-name" });
     const loading = contentEl.createEl("p", { text: t.pitReading, cls: "setting-item-description" });
 
     const read = await this.plugin.readArchivedVersion(ver.oid, this.safeOf(ver));
@@ -354,13 +354,13 @@ export class ArchiveVersionModal extends NanalModal {
         try {
           const p = await this.plugin.exportPitBundle(this.safeOf(ver), dateLabel, ver.oid, read.note, read.proofRaw, v);
           new Notice(t.pitBundleOk(p));
-        } catch (e: any) { new Notice(t.pitExportFail(e?.message ?? String(e))); }
+        } catch (e) { new Notice(t.pitExportFail(errMsg(e))); }
       }))
       .addButton((b) => b.setButtonText(t.pitExportCert).onClick(async () => {
         try {
           const p = await this.plugin.exportPitCertificate(this.safeOf(ver), basenameOf(this.notePath), read.note, dateLabel, ver.oid, v, read.proofRaw);
           if (p) new Notice(t.pitCertOk(p));
-        } catch (e: any) { new Notice(t.pitExportFail(e?.message ?? String(e))); }
+        } catch (e) { new Notice(t.pitExportFail(errMsg(e))); }
       }));
     new Setting(contentEl).addButton((b) => b.setButtonText(t.pitBackBtn).onClick(() => this.renderList()));
   }
@@ -386,7 +386,7 @@ export class AttachmentVersionModal extends NanalModal {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.createEl("h2", { text: this.titleText });
-    contentEl.createEl("div", { text: basenameOf(this.notePath), cls: "setting-item-name" });
+    contentEl.createDiv({ text: basenameOf(this.notePath), cls: "setting-item-name" });
     contentEl.createEl("p", { text: this.pickText, cls: "setting-item-description" });
     for (const ver of this.versions) {
       const when = fmtDateTime(new Date(ver.ts * 1000));
@@ -602,7 +602,7 @@ export class OnboardingScopeModal extends NanalModal {
       el.setText(t.onboardCapacityLine(fmtBytes(bytes), fmtBytes(u.quota)));
       if (u.used + bytes > u.quota) {
         el.addClass("mod-warning");
-        const warn = el.createEl("div", { cls: "mod-warning" });
+        const warn = el.createDiv({ cls: "mod-warning" });
         warn.createSpan({ text: t.onboardCapacityWarn + " " });
         const link = warn.createEl("a", { text: t.pricingCmd });
         link.onclick = () => this.plugin.openExternal("/pricing");
@@ -633,7 +633,7 @@ export class RestoreConfirmModal extends NanalModal {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.createEl("h2", { text: t.rewindConfirmTitle });
-    contentEl.createEl("div", { text: basenameOf(this.opts.notePath), cls: "setting-item-name" });
+    contentEl.createDiv({ text: basenameOf(this.opts.notePath), cls: "setting-item-name" });
     contentEl.createEl("p", { text: t.rewindConfirmMeta(this.opts.seq, this.opts.when), cls: "setting-item-description" });
     const pick = { notePath: this.opts.notePath, expectedHash: this.opts.expectedHash, oid: this.opts.oid, isMd: this.opts.isMd, srcSafe: this.opts.srcSafe };
     const deleted = !(this.app.vault.getAbstractFileByPath(this.opts.notePath) instanceof TFile);
@@ -751,9 +751,10 @@ export class RestoreVaultModal extends NanalModal {
     try {
       const qs = `${fromTs != null ? `&from_ts=${fromTs}` : ""}${toTs != null ? `&to_ts=${toTs}` : ""}${this.vaultHash ? `&vault_hash=${this.vaultHash}` : ""}`;
       const r = await requestUrl({ url: `${this.plugin.base()}/attest/restore/preview?_=1${qs}`, method: "GET", headers: { "x-nanal-api-key": this.plugin.settings.apiKey }, throw: false });
-      if (r.status !== 200 || typeof r.json?.count !== "number") { el.setText(""); return; }
-      let msg = t.restorePreview(r.json.count, fmtBytes(r.json.known_bytes ?? 0));
-      const u = r.json.unknown_count ?? 0;
+      const pj = r.json as { count?: number; known_bytes?: number; unknown_count?: number } | null;
+      if (r.status !== 200 || typeof pj?.count !== "number") { el.setText(""); return; }
+      let msg = t.restorePreview(pj.count, fmtBytes(pj.known_bytes ?? 0));
+      const u = pj.unknown_count ?? 0;
       if (u > 0) msg += t.restorePreviewUnknown(u);
       el.setText(msg);
     } catch { el.setText(""); }
@@ -771,14 +772,15 @@ export class RestoreVaultModal extends NanalModal {
     void (async () => {
       try {
         const r = await requestUrl({ url: `${this.plugin.base()}/attest/restore/status`, method: "GET", headers: { "x-nanal-api-key": this.plugin.settings.apiKey }, throw: false });
-        if (r.status === 200 && typeof r.json?.remaining === "number") {
-          if (r.json.remaining > 0) {
-            quotaBox.createEl("p", { text: t.restoreRemaining(r.json.remaining, r.json.limit ?? 2), cls: "nanalstamp-archive-note nanalstamp-restore-line" });
-          } else if (typeof r.json.credits === "number" && r.json.credits > 0) {
-            quotaBox.createEl("p", { text: t.restoreCredits(r.json.credits), cls: "nanalstamp-archive-note nanalstamp-restore-line" });
+        const sj = r.json as { remaining?: number; limit?: number; credits?: number; next_free_at?: number } | null;
+        if (r.status === 200 && typeof sj?.remaining === "number") {
+          if (sj.remaining > 0) {
+            quotaBox.createEl("p", { text: t.restoreRemaining(sj.remaining), cls: "nanalstamp-archive-note nanalstamp-restore-line" });
+          } else if (typeof sj.credits === "number" && sj.credits > 0) {
+            quotaBox.createEl("p", { text: t.restoreCredits(sj.credits), cls: "nanalstamp-archive-note nanalstamp-restore-line" });
           } else {
             // 소진 — 두 줄로(고정폭 모달에서 중간 줄바꿈 방지): 한도 상태 / 구매 안내
-            const next = typeof r.json.next_free_at === "number" ? fmtDate(new Date(r.json.next_free_at * 1000)) : "?";
+            const next = typeof sj.next_free_at === "number" ? fmtDate(new Date(sj.next_free_at * 1000)) : "?";
             quotaBox.createEl("p", { text: t.restoreVaultLimit(next), cls: "nanalstamp-restore-line is-error" });
             quotaBox.createEl("p", { text: t.restoreBuySoon, cls: "nanalstamp-restore-line is-error" });
           }
@@ -896,13 +898,13 @@ export class PasswordResetModal extends NanalModal {
     contentEl.createEl("p", { text: t.resetDesc, cls: "setting-item-description" });
     new Setting(contentEl)
       .setName(t.emailPlaceholder)
-      .addText((tx) => { tx.setPlaceholder(t.emailPlaceholder).onChange((v) => (this.email = v.trim())); (tx.inputEl as HTMLInputElement).type = "email"; });
+      .addText((tx) => { tx.setPlaceholder(t.emailPlaceholder).onChange((v) => (this.email = v.trim())); (tx.inputEl).type = "email"; });
     new Setting(contentEl)
       .addButton((b) => b.setButtonText(t.resetOpenBtn).onClick(() => this.plugin.openExternal("/reset")))
       .addButton((b) => b.setButtonText(t.resetSendBtn).setCta().onClick(async () => {
         if (!this.email) { new Notice(t.resetNeedEmail); return; }
         try { await this.plugin.accountResetRequest(this.email); new Notice(t.resetSent(this.email)); this.close(); }
-        catch (e: any) { new Notice(t.resetFail(e?.message ?? String(e))); }
+        catch (e) { new Notice(t.resetFail(errMsg(e))); }
       }));
   }
   onClose() {
@@ -963,7 +965,7 @@ export class GitHubConnectModal extends NanalModal {
         throw: false,
       });
       if (this.cancelled) return;
-      const j = res.json;
+      const j = res.json as { device_code?: string; user_code?: string; interval?: number; expires_in?: number; verification_uri?: string } | null;
       if (res.status !== 200 || !j?.device_code || !j?.user_code) {
         this.showRetry(t.ghDeviceFail);
         return;
@@ -973,8 +975,8 @@ export class GitHubConnectModal extends NanalModal {
       this.deadline = Date.now() + (Number(j.expires_in) || 900) * 1000;
       this.renderCode(String(j.user_code), String(j.verification_uri || "https://github.com/login/device"));
       void this.poll();
-    } catch (e: any) {
-      if (!this.cancelled) this.showRetry(t.ghErr(e?.message ?? String(e)));
+    } catch (e) {
+      if (!this.cancelled) this.showRetry(t.ghErr(errMsg(e)));
     }
   }
 
@@ -985,8 +987,8 @@ export class GitHubConnectModal extends NanalModal {
     contentEl.createEl("h2", { text: t.ghModalTitle });
     // ① 코드(모노스페이스, 크게) + 자동 클립보드 복사(실패 무시)
     contentEl.createEl("p", { text: t.ghStep1, cls: "setting-item-name" });
-    contentEl.createEl("div", { text: userCode, cls: "nanalstamp-gh-code" });
-    try { void navigator.clipboard.writeText(userCode); } catch (_) { /* ignore */ }
+    contentEl.createDiv({ text: userCode, cls: "nanalstamp-gh-code" });
+    try { void navigator.clipboard.writeText(userCode); } catch { /* ignore */ }
     // ② GitHub 열기
     new Setting(contentEl)
       .setName(t.ghStep2)
@@ -1002,7 +1004,7 @@ export class GitHubConnectModal extends NanalModal {
       await this.sleep(this.interval * 1000);
       if (this.cancelled) return;
       if (Date.now() > this.deadline) { this.showRetry(t.ghExpired); return; }
-      let j: any;
+      let j: { access_token?: string; error?: string; error_description?: string } | null;
       try {
         const res = await requestUrl({
           url: "https://github.com/login/oauth/access_token",
@@ -1011,8 +1013,8 @@ export class GitHubConnectModal extends NanalModal {
           body: `client_id=${encodeURIComponent(GITHUB_OAUTH_CLIENT_ID)}&device_code=${encodeURIComponent(this.deviceCode)}&grant_type=urn:ietf:params:oauth:grant-type:device_code`,
           throw: false,
         });
-        j = res.json;
-      } catch (_) {
+        j = res.json as { access_token?: string; error?: string; error_description?: string } | null;
+      } catch {
         continue; // 일시적 네트워크 오류 → 다음 주기에 재시도
       }
       if (this.cancelled) return;
@@ -1040,8 +1042,8 @@ export class GitHubConnectModal extends NanalModal {
         headers: this.ghHeaders(token),
         throw: false,
       });
-      login = u.status === 200 ? String(u.json?.login ?? "") : "";
-    } catch (_) { /* ignore */ }
+      login = u.status === 200 ? String((u.json as { login?: string } | null)?.login ?? "") : "";
+    } catch { /* ignore */ }
     if (this.cancelled) return;
     if (!login) {
       // 토큰은 저장하되(수동 repo 지정으로 미러 가능) user 조회 실패 안내
@@ -1092,7 +1094,7 @@ export class GitHubConnectModal extends NanalModal {
         return false;
       }
       return false;
-    } catch (_) {
+    } catch {
       return false;
     }
   }

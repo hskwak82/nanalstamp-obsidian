@@ -92,7 +92,7 @@ export class ArchiveSourceView extends ItemView {
   private addInlineTitle(md: HTMLElement, notePath: string) {
     const cfg = (this.app.vault as unknown as { getConfig?: (k: string) => unknown }).getConfig?.("showInlineTitle");
     if (cfg === false) return;
-    md.createEl("div", { text: basenameOf(notePath).replace(/\.md$/i, ""), cls: "inline-title" });
+    md.createDiv({ text: basenameOf(notePath).replace(/\.md$/i, ""), cls: "inline-title" });
   }
 
   // S3-only 임베드 하이드레이션 — nanal 소스 열람의 원칙: 모든 첨부는 S3 봉인본에서만 가져온다.
@@ -186,7 +186,7 @@ export class ArchiveSourceView extends ItemView {
       const bytes = data as ArrayBuffer;
       new Setting(emEl).setName(basenameOf(m.path)).addButton((b) => b.setButtonText(t.histSaveFile).onClick(() => {
         const url = URL.createObjectURL(new Blob([bytes], { type: blobContentType(m.path) }));
-        const a = document.createElement("a");
+        const a = createEl("a");
         a.href = url;
         a.download = basenameOf(m.path);
         document.body.appendChild(a);
@@ -295,7 +295,7 @@ export class ArchiveSourceView extends ItemView {
       new Setting(el).addButton((b) =>
         b.setButtonText(t.excalidrawOpenCopy).setCta().onClick(async () => {
           try {
-            const file = await this.writeExcalidrawCopy(st.notePath, restoreText as string);
+            const file = await this.writeExcalidrawCopy(st.notePath, restoreText);
             new Notice(t.excalidrawCopyNotice(file.path));
             await this.app.workspace.getLeaf("tab").openFile(file);
           } catch (e: unknown) {
@@ -325,7 +325,7 @@ export class ArchiveSourceView extends ItemView {
 
   // 렌더된 체크박스 등 입력 요소를 잠근다 — 클릭 토글이 보관본을 편집하는 듯한 착시 방지(저장은 원래 안 됨).
   private lockInputs(md: HTMLElement) {
-    md.querySelectorAll("input").forEach((el) => { (el as HTMLInputElement).disabled = true; });
+    md.querySelectorAll("input").forEach((el) => { (el).disabled = true; });
   }
 
   // git.readBlob의 Uint8Array를 Blob이 받는 순수 ArrayBuffer로 복사(SharedArrayBuffer 유니온 회피).
@@ -352,7 +352,7 @@ export class ArchiveSourceView extends ItemView {
       // pdf/xlsx 등 미리보기 비대상 — "파일로 저장"만(임시 Blob URL은 클릭 직후 revoke).
       new Setting(host).setName(t.histSaveHint).addButton((b) => b.setButtonText(t.histSaveFile).setCta().onClick(() => {
         const url = URL.createObjectURL(this.toBlob(bytes));
-        const a = document.createElement("a");
+        const a = createEl("a");
         a.href = url;
         a.download = basenameOf(st.notePath);
         document.body.appendChild(a);
@@ -543,7 +543,7 @@ export class DashboardView extends ItemView {
   // 오독(링 100% 빨강 vs 바 빨강 74%) 제거(2026-07-22 사용자 지적). 합이 보호율, 색이 내역.
   private buildGauge(coveredPct: number, pendingPct: number): HTMLElement {
     const pct = Math.min(100, coveredPct + pendingPct);
-    const wrap = document.createElement("div");
+    const wrap = createDiv();
     wrap.className = "nanalstamp-dash-gauge";
     const ns = "http://www.w3.org/2000/svg";
     const svg = document.createElementNS(ns, "svg");
@@ -566,12 +566,12 @@ export class DashboardView extends ItemView {
     seg(0, coveredPct, "var(--ns-seal)");          // 증명 완료(빨강)
     seg(coveredPct, pendingPct, "var(--ns-info)"); // 확정 대기(파랑) — 진행 중
     wrap.appendChild(svg);
-    const center = document.createElement("div");
+    const center = createDiv();
     center.className = "nanalstamp-dash-gauge-center";
-    const pctEl = document.createElement("div");
+    const pctEl = createDiv();
     pctEl.className = "nanalstamp-dash-gauge-pct num";
     pctEl.textContent = `${pct}%`;
-    const lblEl = document.createElement("div");
+    const lblEl = createDiv();
     lblEl.className = "nanalstamp-dash-gauge-lbl";
     lblEl.textContent = t.dashGaugeLabel;
     center.appendChild(pctEl);
@@ -785,7 +785,7 @@ export class DashboardView extends ItemView {
       } finally {
         if (gen === this.renderGen) {
           this.lineagePending = false;
-          this.render(false);   // dashData 재사용 — 해시·git log 를 다시 돌지 않는다
+          void this.render(false);   // dashData 재사용 — 해시·git log 를 다시 돌지 않는다
         }
       }
     })();
@@ -866,7 +866,6 @@ export class DashboardView extends ItemView {
     const pending = pendModified + pendUnsealed;
     const modLeft = cov.modified - pendModified;
     const unsLeft = cov.unsealed - pendUnsealed;
-    const actionCount = modLeft + unsLeft; // 사용자가 실제로 해야 할 것만 — 확정 대기는 자동 진행이라 제외
     const kGap = kpis.createDiv({ cls: "nanalstamp-dash-kpi" });
     const kGapLbl = kGap.createDiv({ cls: "k", text: t.dashKpiAction });
     kGapLbl.createSpan({ cls: "nanalstamp-dash-info", text: " ⓘ" });
@@ -898,7 +897,7 @@ export class DashboardView extends ItemView {
     kBlock.createDiv({ cls: "k", text: t.dashKpiLatestBlock });
     kBlock.createDiv({ cls: "v num", text: sync.latestBlock ? `#${sync.latestBlock}` : "—" });
 
-    const flatDays = heatWeeks.flat().filter((c) => !c.future);
+    const flatDays = ([] as (typeof heatWeeks)[number]).concat(...heatWeeks).filter((c) => !c.future);
     const sealedDays = flatDays.filter((c) => c.count > 0).length;
     const kSeal = kpis.createDiv({ cls: "nanalstamp-dash-kpi" });
     kSeal.createDiv({ cls: "k", text: t.dashKpiSealDays });
@@ -1111,8 +1110,8 @@ export class DashboardView extends ItemView {
   // GitHub 잔디 스타일: 열=달력 주, 상단 월 라벨, 좌측 월/수/금 라벨, 5단계 농도 + 범례.
   private renderHeatmapCard(grid: HTMLElement, heatWeeks: ReturnType<typeof heatmapCounts>): void {
     const c = this.card(grid, t.dashHeatmap, this.zoom === "heat" ? undefined : "span2", "heat");
-    const totalSeals = heatWeeks.flat().reduce((a, x) => a + x.count, 0);
-    const recentSeals = heatWeeks.slice(-12).flat().reduce((a, x) => a + x.count, 0);
+    const totalSeals = ([] as (typeof heatWeeks)[number]).concat(...heatWeeks).reduce((a, x) => a + x.count, 0);
+    const recentSeals = ([] as (typeof heatWeeks)[number]).concat(...heatWeeks.slice(-12)).reduce((a, x) => a + x.count, 0);
     const sub = c.createDiv({ cls: "nanalstamp-dash-mut" });
     sub.setText(t.dashHeatTotal(totalSeals, recentSeals));
     if (heatWeeks.length > 12 && this.zoom !== "heat") sub.setText(`${t.dashHeatTotal(totalSeals, recentSeals)} · ${t.dashHeatDragHint}`);
@@ -1153,7 +1152,7 @@ export class DashboardView extends ItemView {
     // 셀 툴팁은 자체 즉시 툴팁(0ms) — 네이티브 title은 OS 지연이 있다(2026-07-22 사용자 지적).
     // 셀이 수백~수천 개라 개별 리스너 대신 컨테이너 위임 1쌍으로 처리한다.
     heat.addEventListener("mouseover", (ev) => {
-      const cellEl = (ev.target as HTMLElement).closest?.(".cell[data-tip]") as HTMLElement | null;
+      const cellEl = (ev.target as HTMLElement).closest?.<HTMLElement>(".cell[data-tip]");
       if (cellEl) this.showTipAt(cellEl, cellEl.getAttr("data-tip") ?? "");
       else this.hideTip();
     });
@@ -1324,7 +1323,7 @@ export class TaskInboxView extends ItemView {
           el.value = d.value;
           if (d.focused) {
             el.focus();
-            try { el.setSelectionRange(d.selStart, d.selEnd); } catch (_) { /* 무시 */ }
+            try { el.setSelectionRange(d.selStart, d.selEnd); } catch { /* 무시 */ }
           }
         });
       }
@@ -1449,8 +1448,9 @@ export class TaskInboxView extends ItemView {
     const openDone = (task: TaskItem, recall: boolean) =>
       new TaskDoneModal(this.app, this.plugin, task, recall, () => void this.refresh(true)).open();
     return {
-      accept: async (task) => {
-        if (await this.plugin.taskPost(`/attest/team/tasks/${encodeURIComponent(task.id)}/accept`)) void this.refresh(true);
+      accept: (task) => {
+        void this.plugin.taskPost(`/attest/team/tasks/${encodeURIComponent(task.id)}/accept`)
+          .then((r) => { if (r) void this.refresh(true); });
       },
       decline: (task) => new TaskDeclineModal(this.app, this.plugin, task, () => void this.refresh(true)).open(),
       // 제목 클릭 — 표·컴팩트가 공유한다. 연결 노트 열기는 상세 안 버튼으로 넘겼다.
@@ -1468,8 +1468,9 @@ export class TaskInboxView extends ItemView {
       edit: (task) => new TaskEditModal(this.app, this.plugin, task, () => void this.refresh(true)).open(),
       markDone: (task, recall) => openDone(task, recall),
       request: (task) => new TaskRequestModal(this.app, this.plugin, task, () => void this.refresh(true)).open(),
-      cancel: async (task) => {
-        if (await this.plugin.taskPost(`/attest/team/tasks/${encodeURIComponent(task.id)}/cancel`)) void this.refresh(true);
+      cancel: (task) => {
+        void this.plugin.taskPost(`/attest/team/tasks/${encodeURIComponent(task.id)}/cancel`)
+          .then((r) => { if (r) void this.refresh(true); });
       },
       reopen: (task) => new TaskReopenModal(this.app, this.plugin, task, () => void this.refresh(true)).open(),
       openNote: (path) => { void this.app.workspace.openLinkText(path, "", false); },
@@ -1610,7 +1611,7 @@ export class TaskInboxView extends ItemView {
     ta.rows = 2;
     ta.placeholder = t.taskReplyPh;
     const send = form.createEl("button", { cls: "nanalstamp-task-act is-pri", text: t.taskReplySend });
-    send.addEventListener("click", async () => {
+    const submitReply = async () => {
       const body = ta.value.trim();
       if (!body) return;
       send.disabled = true;
@@ -1621,6 +1622,7 @@ export class TaskInboxView extends ItemView {
       this.replies.delete(task.id); // 서버 정본으로 재조회(작성자 이메일·시각 포함)
       task.replyCount += 1;
       await this.loadReplies(task.id);
-    });
+    };
+    send.addEventListener("click", () => void submitReply());
   }
 }

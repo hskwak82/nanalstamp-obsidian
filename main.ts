@@ -1,5 +1,4 @@
 import { addIcon, arrayBufferToBase64, FileSystemAdapter, MarkdownView, Menu, Notice, Platform, RequestUrlResponse, TFile, TFolder, requestUrl } from "obsidian";
-import * as git from "isomorphic-git";
 import { PitVerify, pitVerifyReadme, pitCertificateHtml } from "./certgen";
 import * as QRCode from "qrcode";
 import { computeDigestStats, previousPeriod, periodLabel } from "./dashcore";
@@ -8,20 +7,17 @@ import { scopeBody, scopeDocument, scopeChanged, SCOPE_ZERO } from "./scopecore"
 import { verifySealAck } from "./chaincore";
 import { chunk, pendingFrom, rotationSlice, reconcileStale, toAsk, HAVE_CHUNK, ScannedFile } from "./reconcilecore";
 import { sealHold, effectiveLimit, planThatFits, HoldReason, MB } from "./holdcore";
-import { parseArchiveMsg } from "./archivemsg";
 import { blobExt, fmtBytes, storageEndpoint } from "./storagecore";
-import { parseManifest } from "./chunkcore";
 import { encryptBlob, decryptBlob } from "./cryptocore";
 import { RewindEntry, deletedEntries } from "./rewindcore";
 import { parseHistoryResponse, parseNotesResponse, parseVaultsResponse, HistRow, NoteRow, VaultRow } from "./notebrowsercore";
 import { TaskItem, TaskReply, RosterMember, personDisplay, parseTasksResponse, parseRepliesResponse, parseRosterResponse, badgeCount, unionTasks, snapshotOf, diffSnapshot, TaskSnapshot, TaskEvent, sseInitialState, sseFeed, parsePatterns, matchesPatterns, unreported, KitManifest, parseTeamStructure, parseKitManifest, manifestPaths, nfcPath, nfcPaths, creationPlan, isBinaryPath, projectPrefix, commonPrefix, scopedPatterns, TeamStructure, folderStatus, FolderTarget, detectFolderConflicts, detectFolderRenames, FolderNameSnapshot, FolderRename, SortKey, templateForFolder, isUntitledName, nextNoteName, kitRuleFor, teamFolderSegment, digestFolderFor, capFolderReport } from "./taskcore";
-import { runAction } from "./taskview";
 import type { TaskViewPrefs } from "./taskview";
 // 번역 사전은 i18n.ts 소유 — `t`/`tpl`은 setLang()이 재대입하는 live binding이다(재대입은 i18n.ts에서만).
 import { t, tpl, pickLang, setLang } from "./i18n";
 import { fmtDate, fmtDateTime } from "./fmtutil";
 import { ICON_ID, ARCHIVE_SOURCE_VIEW_TYPE, NOTE_BROWSER_VIEW_TYPE, DASHBOARD_VIEW_TYPE, TASK_INBOX_VIEW_TYPE, TASK_POLL_MS, TASK_SSE_RETRY_MIN_MS, TASK_SSE_RETRY_MAX_MS, ARCHIVE_INLINE_MAX } from "./constants";
-import { defaultArchivePath, parseFolders, sha256Hex, sha256HexBytes, PATH_HASH_PREFIX, hashVaultName, hashPath, toBase64, basenameOf, safeName } from "./pathutil";
+import { defaultArchivePath, errMsg, nodeReq, parseFolders, sha256Hex, sha256HexBytes, PATH_HASH_PREFIX, hashVaultName, hashPath, toBase64, basenameOf, safeName } from "./pathutil";
 import { NanalStampSettingTab, FolderTreeModal } from "./settingtab";
 import { AccountResumeModal, ProofModal, OnboardingScopeModal, DeletedNoteSuggestModal, RestoreVaultModal, PasswordResetModal } from "./modals";
 import { ArchiveSourceView, NoteBrowserView, DashboardView, TaskInboxView } from "./views";
@@ -32,6 +28,35 @@ import { RecoveryLayer } from "./recoverylayer";
 import { SubmissionPackageModal } from "./packagemodal";
 import { ReviewResultModal, ReviewRequestModal } from "./reviewmodal";
 import { StorageRecoveryModal } from "./recoverymodal";
+
+// 봉인 범위 문서(scopeDocument JSON) — 표시부(settingtab)가 읽는 필드만 선언.
+export type ScopeDoc = { "본문"?: { "포함_폴더"?: string[]; "제외_폴더"?: string[] } } & Record<string, unknown>;
+
+// /attest/verify 응답 — 플러그인이 읽는 필드만(구서버는 matches[] 폴백 형태).
+export interface VerifyResp {
+  found?: boolean;
+  seq?: number;
+  received_at?: number;
+  anchored?: boolean;
+  bitcoin?: { block_height?: number };
+  matches?: Array<{ seq?: number; received_at?: number; bitcoin?: { block_height?: number } }>;
+}
+
+// /attest/review/status 응답 행 — 표시부(modals)가 읽는 필드만.
+export interface ReviewStatusRow {
+  status?: string;
+  reviewed_at?: number;
+  statement?: string;
+  reviewer_email?: string;
+  decline_note?: string;
+}
+
+// 아카이브에 저장된 증명 JSON(.nanalproof) — 오프라인 자기검증이 읽는 필드만.
+export interface ArchivedProof {
+  file_hash?: unknown;
+  matched_seq?: number;
+  anchor?: { bitcoin?: { block_height?: number } } | null;
+}
 
 
 // ── Node 접근(데스크탑 Electron 전용) ────────────────────────────────────────
@@ -48,8 +73,8 @@ const NANAL_SEAL_DATA_URI =
 // 봉인 성공 Notice 공용 헬퍼 — 🔏 이모지 대신 나날 씰 이미지(16px)를 아이콘으로 표시.
 // DocumentFragment로 img+텍스트를 구성해 Obsidian Notice(문자열|Fragment 둘 다 지원)에 전달.
 function sealNotice(text: string, timeout?: number): Notice {
-  const frag = document.createDocumentFragment();
-  const img = document.createElement("img");
+  const frag = createFragment();
+  const img = createEl("img");
   img.src = NANAL_SEAL_DATA_URI;
   img.width = 16;
   img.height = 16;
@@ -377,7 +402,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
   private teamExpiredNotified = false;    // past_due 알림 세션당 1회 가드
   entitlement: { tier: string; cert_credits: number; is_pro: boolean; status?: string; user_id?: string; paid_until?: number | null } | null = null;
   // 해시별 verify 결과 캐시 + 노트 전환 디바운스 타이머(같은 해시 재조회/연타 전환 시 서버 호출 절감)
-  private verifyCache = new Map<string, { result: any; ts: number }>();
+  private verifyCache = new Map<string, { result: VerifyResp; ts: number }>();
   private statusDebounceTimer?: number;
   // 활성 노트가 '앵커 중'(anchored지만 ₿ 미확정)이면 true → 주기 재검증으로 확정 자동 반영.
   // 노트를 열어둔 채 앵커가 확정되면 상태바가 전환 없이도 따라오게 한다.
@@ -448,7 +473,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
     try {
       const buf = await this.app.vault.adapter.readBinary(`${this.app.vault.configDir}/plugins/${this.manifest.id}/icon.png`);
       this.iconUrl = "data:image/png;base64," + arrayBufferToBase64(buf);
-    } catch (e) { this.iconUrl = ""; }
+    } catch { this.iconUrl = ""; }
     // 탭·메뉴·상태바 아이콘도 정본 nanal.png(iconUrl)를 <image>로 그대로 그린다(필터·재해석 없음).
     // 로드 실패 시 빈 아이콘 — SVG 글리프 등 임의 대체물 금지(브랜드 원칙: 이미지 하나만).
     addIcon(ICON_ID, this.iconUrl ? `<image href="${this.iconUrl}" x="0" y="0" width="100" height="100"/>` : "");
@@ -547,7 +572,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
       name: t.sealCmd,
       callback: () => {
         const f = this.app.workspace.getActiveFile();
-        if (f) this.flush(f, "manual");
+        if (f) void this.flush(f, "manual");
         else new Notice(t.noNote);
       },
     });
@@ -713,7 +738,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
 
   /** 이 플러그인의 설정 탭을 연다. setting API는 공개 타입에 없어 any 캐스팅(커뮤니티 관례). */
   openOwnSettings(): void {
-    const s = (this.app as any).setting;
+    const s = (this.app as unknown as { setting?: { open?: () => void; openTabById?: (id: string) => void } }).setting;
     if (!s?.open) return; // 비공식 API — 없는 환경에서 던지면 클릭이 무반응이 된다(고치려던 증상과 같은 모양).
     s.open();
     s.openTabById?.(this.manifest.id);
@@ -727,7 +752,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
       if (s.timer) window.clearTimeout(s.timer);
       if (s.dirty) {
         const f = this.app.vault.getAbstractFileByPath(path);
-        if (f instanceof TFile) this.flush(f, "unload");
+        if (f instanceof TFile) void this.flush(f, "unload");
       }
     }
     this.states.clear();
@@ -965,7 +990,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
         // 첨부를 줄여도 노트 자체는 바뀌지 않아 봉인 트리거(dirty)가 서지 않기 때문이다.
         // 실제로 e2e 에서 "보류는 풀렸는데 영영 봉인되지 않는" 상태가 잡혔다(2026-07-30).
         await this.clearSealHold(notePath);
-        this.flush(f, "retry");
+        void this.flush(f, "retry");
       }
     }
   }
@@ -1110,7 +1135,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
     const s = this.stateOf(file.path);
     s.timer = undefined;
     if (!this.settings.enabled || !s.dirty) return;
-    if (Date.now() - s.dirtyAt >= MIN_INTERVAL_MS) this.flush(file, "settle");
+    if (Date.now() - s.dirtyAt >= MIN_INTERVAL_MS) void this.flush(file, "settle");
   }
 
   // 활성 노트 전환: 추적·상태바 갱신만 — 전환 즉시 봉인은 폐지(닫힘·시간 규칙이 봉인을 담당).
@@ -1155,7 +1180,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
     let pruned = false;
     for (const p of Array.from(this.failed)) {
       const f = this.app.vault.getAbstractFileByPath(p);
-      if (f instanceof TFile) this.flush(f, "retry");
+      if (f instanceof TFile) void this.flush(f, "retry");
       else { this.failed.delete(p); pruned = true; }
     }
     if (pruned) void this.persistFailed();
@@ -1304,11 +1329,12 @@ export default class NanalStampPlugin extends RecoveryLayer {
           headers: { "x-nanal-api-key": this.settings.apiKey },
           body: JSON.stringify({ hashes: part }), throw: false,
         });
-        if (r.status !== 200 || !Array.isArray(r.json?.present)) {
-          console.warn("[nanalstamp] 대조 실패 — 판정을 미룬다", r.status, r.json?.error);
+        const rj = r.json as { present?: unknown; error?: unknown } | null;
+        if (r.status !== 200 || !Array.isArray(rj?.present)) {
+          console.warn("[nanalstamp] 대조 실패 — 판정을 미룬다", r.status, rj?.error);
           return null;                       // reconcileAt 을 갱신하지 않아 '오래됨'으로 잡힌다
         }
-        for (const h of r.json.present as string[]) present.add(h);
+        for (const h of rj.present as string[]) present.add(h);
       }
       // 이번에 묻지 않은 것은 **판정 대상이 아니다.** 안 물어본 것을 "없다"고 하면
       // 멀쩡한 노트를 다시 봉인하게 된다(회전 방식에서 특히 위험하다).
@@ -1350,19 +1376,20 @@ export default class NanalStampPlugin extends RecoveryLayer {
   /// 범위 변경 이력 — 설정 화면이 표로 보여준다. 문서는 이 기기의 DEK 로만 열린다
   /// (서버는 암호문만 갖고 있다). 복호에 실패하면 해시와 시각만이라도 보여준다 —
   /// **"그때 범위가 바뀌었다"는 사실 자체가 사슬에 남아 있다는 것**이 핵심이기 때문이다.
-  async scopeHistory(): Promise<Array<{ n: number; seq: number; at: number; block: number | null; doc: any | null; docHash: string }>> {
+  async scopeHistory(): Promise<Array<{ n: number; seq: number; at: number; block: number | null; doc: ScopeDoc | null; docHash: string }>> {
     const base = this.settings.serverUrl.replace(/\/$/, "");
     const r = await requestUrl({ url: `${base}/attest/scope/history`,
       headers: { "x-nanal-api-key": this.settings.apiKey }, throw: false });
-    if (r.status !== 200 || !Array.isArray(r.json?.rows)) return [];
+    const body = r.json as { rows?: Array<{ n: number; seq: number; received_at: number; block?: number | null; enc_doc?: string; doc_hash: string }> } | null;
+    if (r.status !== 200 || !Array.isArray(body?.rows)) return [];
     const dek = await this.nanalDek(false).catch(() => null);   // 범위 문서는 개인 키(위 참조)
     const out = [];
-    for (const row of r.json.rows) {
-      let doc: any = null;
+    for (const row of body.rows) {
+      let doc: ScopeDoc | null = null;
       if (dek && row.enc_doc) {
         try {
           const raw = await decryptBlob(dek, row.doc_hash, "scope", Uint8Array.from(atob(row.enc_doc), (c) => c.charCodeAt(0)));
-          doc = JSON.parse(new TextDecoder().decode(raw));
+          doc = JSON.parse(new TextDecoder().decode(raw)) as ScopeDoc;
         } catch (e) { console.warn("[nanalstamp] 범위 문서 복호 실패", row.n, e); }
       }
       out.push({ n: row.n, seq: row.seq, at: row.received_at, block: row.block ?? null,
@@ -1470,7 +1497,8 @@ export default class NanalStampPlugin extends RecoveryLayer {
       const head = await requestUrl({ url: `${base}/attest/scope`, method: "GET",
         headers: { "x-nanal-api-key": this.settings.apiKey }, throw: false });
       if (head.status !== 200) return;
-      const latest = head.json?.latest ?? null;
+      const headBody = head.json as { latest?: { body_hash?: string; doc_hash?: string } | null } | null;
+      const latest = headBody?.latest ?? null;
       const body = scopeBody({
         vault: this.app.vault.getName(),
         include: this.settings.includeFolders,
@@ -1502,8 +1530,9 @@ export default class NanalStampPlugin extends RecoveryLayer {
         headers: { "x-nanal-api-key": this.settings.apiKey },
         body: JSON.stringify({ hash, body_hash: bodyHash, ...(encDoc ? { enc_doc: encDoc } : {}) }),
         throw: false });
-      if (r.status === 200 && !r.json?.unchanged) {
-        console.debug("[nanalstamp] 봉인 범위 스냅샷 봉인됨 —", r.json?.n, "번째");
+      const rBody = r.json as { unchanged?: boolean; n?: number } | null;
+      if (r.status === 200 && !rBody?.unchanged) {
+        console.debug("[nanalstamp] 봉인 범위 스냅샷 봉인됨 —", rBody?.n, "번째");
       }
     } catch (e) {
       console.warn("[nanalstamp] scope snapshot skip", e);
@@ -1517,10 +1546,9 @@ export default class NanalStampPlugin extends RecoveryLayer {
   private beaconDirty() {
     try {
       if (!this.settings.enabled || !this.settings.apiKey) return;
-      const nreq = (window as unknown as { require?: (mod: string) => any }).require;
-      if (!nreq) return; // 데스크탑(Electron)만
-      const nodeCrypto = nreq("crypto");
-      const fs = nreq("fs");
+      if (!Platform.isDesktopApp) return; // 데스크탑(Electron)만
+      const nodeCrypto = nodeReq("crypto");
+      const fs = nodeReq("fs");
       const adapter = this.app.vault.adapter;
       const base = adapter instanceof FileSystemAdapter ? adapter.getBasePath() : undefined;
       const active = this.app.workspace.getActiveFile();
@@ -1563,7 +1591,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
     for (const [path, s] of this.states) {
       if (s.dirty && !s.timer && now - s.dirtyAt >= MIN_INTERVAL_MS) {
         const f = this.app.vault.getAbstractFileByPath(path);
-        if (f instanceof TFile && this.inSealScope(path)) this.flush(f, "settle");
+        if (f instanceof TFile && this.inSealScope(path)) void this.flush(f, "settle");
       }
     }
   }
@@ -1582,7 +1610,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
     if (!(f instanceof TFile)) { new Notice(t.taskResultMissing(path)); return; }
     try {
       await this.flush(f, "task-result");
-    } catch (e) {
+    } catch {
       new Notice(t.taskResultSealFail(basenameOf(path)));
       return;
     }
@@ -1591,7 +1619,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
         const h = await hashPath(path);
         await this.taskPost(`/attest/team/projects/${encodeURIComponent(projectId)}/notes`,
           { path_hashes: [h] }, { silent: true });
-      } catch (e) { /* 귀속 실패는 조용히 — 폴더 동기화가 다음 기회에 다시 시도한다 */ }
+      } catch { /* 귀속 실패는 조용히 — 폴더 동기화가 다음 기회에 다시 시도한다 */ }
     }
     new Notice(t.taskResultSealed(basenameOf(path)));
   }
@@ -1709,7 +1737,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
         await this.taskPost(`/attest/team/projects/${encodeURIComponent(prj.id)}/notes`,
           { path_hashes: [oldHash, newHash] }, { silent: true });
       }
-    } catch (e) { /* 조용히 — 이동 기록 실패가 개명 자체를 막으면 안 된다 */ }
+    } catch { /* 조용히 — 이동 기록 실패가 개명 자체를 막으면 안 된다 */ }
   }
 
   async flush(file: TFile, reason: string) {
@@ -1829,7 +1857,8 @@ export default class NanalStampPlugin extends RecoveryLayer {
         return;
       }
       // 그 외 비정상(5xx·네트워크) → throw → catch에서 재시도 큐로
-      if (res.status !== 200 || !res.json?.ok) throw new Error(`${res.status}: ${res.json?.error ?? "unknown"}`);
+      const sealJson = res.json as ({ ok?: boolean; error?: unknown; seq?: number } & import("./chaincore").SealAck) | null;
+      if (res.status !== 200 || !sealJson?.ok) throw new Error(`${res.status}: ${String(sealJson?.error ?? "unknown")}`);
       // 200 은 "응답이 왔다"일 뿐 "내가 보낸 그것을 기록했다"가 아니다(2026-07-30).
       // 서버가 돌려준 조각들로 고리를 **다시 계산**해 내 내용으로 만들어졌는지 확인한다 —
       // 검증기 3종이 나중에 하는 그 계산을 봉인하는 자리에서 한 번 더 하는 것이다.
@@ -1841,7 +1870,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
       const claim = inTeam && this.settings.teamApiKey
         ? (this.settings.teamClaimAccount || undefined)
         : this.settings.claimAccount;
-      const ack = await verifySealAck(res.json, hash, claim, sha256Hex);
+      const ack = await verifySealAck(sealJson, hash, claim, sha256Hex);
       if (ack.ok === false) {
         console.error("[nanalstamp] 봉인 응답이 보낸 내용과 맞지 않습니다", ack.why, file.path, res.json);
         throw new Error(`seal ack ${ack.why}`);   // 재시도 큐로 — 조용히 성공 처리하지 않는다
@@ -1865,7 +1894,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
       void this.updateActiveStatus();
       // 봉인 시점 원문 아카이브·미러(비동기, 봉인 흐름 안 막음).
       // 위에서 읽은 바이트를 그대로 넘긴다 — 다시 읽으면 그 사이 편집분이 잡혀 이 버전을 잃는다.
-      void this.recordSealProof(file, hash, res.json.seq, sealedBytes);
+      void this.recordSealProof(file, hash, sealJson.seq, sealedBytes);
       // digest 등록부 보고(2026-08-02) — 서버는 평문 경로를 모르므로 「이게 〈기간〉 digest 다」는
       // 여기서만 말할 수 있다. 실패해도 봉인에는 영향이 없다.
       void this.reportDigestIfAny(file.path, hash);
@@ -1878,12 +1907,12 @@ export default class NanalStampPlugin extends RecoveryLayer {
       const troot = this.teamRoot();
       if (troot && this.teamProjects.some((p) =>
         matchesPatterns(file.path, scopedPatterns(troot, parsePatterns(p.folder_patterns))))) void this.syncProjectNotes();
-      if (interactive) sealNotice(t.noticeSealed(file.basename, res.json.seq, t.reason[reason] ?? reason));
-    } catch (e: any) {
+      if (interactive) sealNotice(t.noticeSealed(file.basename, sealJson.seq ?? 0, t.reason[reason] ?? reason));
+    } catch (e) {
       this.failed.add(file.path); // 재시도 큐
       void this.persistFailed();
       void this.updateActiveStatus();
-      if (interactive) new Notice(t.noticeFail(file.basename, e?.message ?? String(e)));
+      if (interactive) new Notice(t.noticeFail(file.basename, errMsg(e)));
       console.error("[nanalstamp] seal error", file.path, e);
     }
   }
@@ -1919,12 +1948,12 @@ export default class NanalStampPlugin extends RecoveryLayer {
         headers: { "x-nanal-api-key": this.settings.apiKey },
         throw: false,
       });
-      if (res.status !== 200 || !res.json?.ok) throw new Error(`${res.status}`);
+      if (res.status !== 200 || !(res.json as { ok?: boolean } | null)?.ok) throw new Error(`${res.status}`);
       this.invalidateVerify(); // 앵커로 블록고가 바뀌므로 전체 캐시 무효화(stale ₿ 표시 방지)
       new Notice(t.anchorOk);
       void this.updateActiveStatus();
-    } catch (e: any) {
-      new Notice(t.anchorFail(e?.message ?? String(e)));
+    } catch (e) {
+      new Notice(t.anchorFail(errMsg(e)));
     }
   }
 
@@ -1946,9 +1975,10 @@ export default class NanalStampPlugin extends RecoveryLayer {
         body: JSON.stringify({ from, to, project_id: projectId, title, note }),
         throw: false,
       });
-      if (res.status === 200) return { ok: true, count: res.json?.item_count ?? 0 };
+      const j = res.json as { item_count?: number; error?: unknown } | null;
+      if (res.status === 200) return { ok: true, count: j?.item_count ?? 0 };
       // 서버가 이유를 말해 주면 그대로 보여준다 — "실패했습니다"보다 할 일을 알 수 있다.
-      return { ok: false, message: typeof res.json?.error === "string" ? res.json.error : undefined };
+      return { ok: false, message: typeof j?.error === "string" ? j.error : undefined };
     } catch {
       return { ok: false };
     }
@@ -1967,8 +1997,9 @@ export default class NanalStampPlugin extends RecoveryLayer {
         body: JSON.stringify({ file_hash: hash }),
         throw: false,
       });
-      if (res.status === 200 && res.json?.review_id) new Notice(t.reviewReqSent);
-      else if (res.status === 400 && typeof res.json?.error === "string") new Notice(res.json.error);
+      const j = res.json as { review_id?: unknown; error?: unknown } | null;
+      if (res.status === 200 && j?.review_id) new Notice(t.reviewReqSent);
+      else if (res.status === 400 && typeof j?.error === "string") new Notice(j.error);
       else new Notice(t.reviewReqFail);
     } catch {
       new Notice(t.reviewReqFail);
@@ -1977,7 +2008,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
 
   // 점검 상태 조회(모달 표시용) — GET /attest/review/status. 200이면 리뷰 배열, 그 외
   // (404 미봉인·403 비권한·네트워크)는 null로 조용히 처리해 비팀 사용자에게 잡음을 주지 않는다.
-  async fetchReviewStatus(file: TFile): Promise<any[] | null> {
+  async fetchReviewStatus(file: TFile): Promise<ReviewStatusRow[] | null> {
     if (!this.settings.apiKey) return null;
     let hash: string;
     try { hash = await this.hashOf(file); } catch { return null; }
@@ -1988,7 +2019,8 @@ export default class NanalStampPlugin extends RecoveryLayer {
         headers: { "x-nanal-api-key": this.keyFor(this.inTeamRoot(file.path)) },
         throw: false,
       });
-      if (res.status === 200 && Array.isArray(res.json?.reviews)) return res.json.reviews;
+      const j = res.json as { reviews?: ReviewStatusRow[] } | null;
+      if (res.status === 200 && Array.isArray(j?.reviews)) return j.reviews;
     } catch { /* 조용히 생략 */ }
     return null;
   }
@@ -2014,8 +2046,8 @@ export default class NanalStampPlugin extends RecoveryLayer {
       await this.app.workspace.getLeaf(false).openFile(file);
       const ed = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
       if (ed) ed.setCursor(ed.lineCount(), 0);
-    } catch (e: any) {
-      new Notice(t.tplErr(e?.message ?? String(e)));
+    } catch (e) {
+      new Notice(t.tplErr(errMsg(e)));
       console.error("[nanalstamp] newDevNote error", e);
     }
   }
@@ -2091,8 +2123,8 @@ export default class NanalStampPlugin extends RecoveryLayer {
       const ed = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor;
       if (ed) ed.setCursor(ed.lineCount(), 0);
       this.updateTaskRibbon();
-    } catch (e: any) {
-      new Notice(t.digestErr(e?.message ?? String(e)));
+    } catch (e) {
+      new Notice(t.digestErr(errMsg(e)));
       console.error("[nanalstamp] createDigest error", e);
     }
   }
@@ -2308,14 +2340,15 @@ export default class NanalStampPlugin extends RecoveryLayer {
         throw: false,
       });
       // ★ 여기서 조용히 되돌아가 원문이 영영 안 올라간 적이 있다(2026-08-01). 사유를 남긴다.
-      if (res.status !== 200 || !res.json?.found) {
-        this.stallUpload(file.path, `증명을 아직 받지 못함(HTTP ${res.status}${res.json?.found === false ? ", found=false" : ""})`, true);
+      const bj = res.json as { found?: boolean; matched_seq?: number } | null;
+      if (res.status !== 200 || !bj?.found) {
+        this.stallUpload(file.path, `증명을 아직 받지 못함(HTTP ${res.status}${bj?.found === false ? ", found=false" : ""})`, true);
         return;
       }
       body = JSON.stringify(res.json, null, 2);
       // seq 미전달(재시도 경로)이면 번들의 matched_seq로 복원 — 커밋 메시지 seq 품질 유지.
-      if (seq == null && typeof res.json.matched_seq === "number") seq = res.json.matched_seq;
-    } catch (e) { this.stallUpload(file.path, `증명 조회 실패: ${(e as Error)?.message ?? e}`, true); return; }
+      if (seq == null && typeof bj.matched_seq === "number") seq = bj.matched_seq;
+    } catch (e) { this.stallUpload(file.path, `증명 조회 실패: ${errMsg(e)}`, true); return; }
 
     // 원문/바이트 읽기(현재 파일). 비동기 사이에 파일이 또 바뀌었으면 이 봉인 해시와 불일치 →
     // 잘못된 내용을 seq에 붙이지 않도록 스킵(그 새 내용은 자기 자신의 봉인에서 아카이브된다).
@@ -2406,7 +2439,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
   // 확정(비트코인 블록 존재)된 노트의 자기검증 번들을 로컬 원장에 저장하고,
   // Pro·미러 on이면 원본+증명을 GitHub에 push. 이미 같은 해시로 저장돼 있으면 아무 것도 안 함.
   // verify(옵션)를 주면 서버 재조회를 아낀다(확정 판정·seq·블록고에 사용).
-  private async recordConfirmedProof(file: TFile, hash: string, verify?: any, silent = false): Promise<boolean> {
+  private async recordConfirmedProof(file: TFile, hash: string, verify?: VerifyResp, silent = false): Promise<boolean> {
     // 위와 같다 — blanket 게이트 없이 아래 per-path 판정이 전담한다(P-03 완결).
     if (!this.settings.enabled || !this.settings.apiKey) return false;
     if (!this.inSealScope(file.path)) return false;
@@ -2441,7 +2474,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
         headers: { "x-nanal-api-key": this.keyFor(this.inTeamRoot(file.path)) },
         throw: false,
       });
-      if (res.status !== 200 || !res.json?.found) return false;
+      if (res.status !== 200 || !(res.json as { found?: boolean } | null)?.found) return false;
       const body = JSON.stringify(res.json, null, 2);
 
       let changed = false;
@@ -2490,7 +2523,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
       }
       if (changed) await this.persist();
       return changed;
-    } catch (e: any) {
+    } catch (e) {
       console.error("[nanalstamp] ledger error", file.path, e);
       return false;
     }
@@ -2902,7 +2935,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
 
   // 오프라인 자기검증: 아카이브된 원문을 해시해 proof의 file_hash와 대조 + 확정 블록 존재 확인.
   // 서버·네트워크 불필요 — 아카이브만으로 "그때 이 내용을 썼다"가 성립함을 보인다.
-  async selfVerifyArchived(noteContent: string, proof: any): Promise<PitVerify> {
+  async selfVerifyArchived(noteContent: string, proof: ArchivedProof | null): Promise<PitVerify> {
     const computed = await sha256Hex(noteContent);
     const expected = String(proof?.file_hash || "").toLowerCase();
     const hashMatch = expected.length === 64 && computed === expected;
@@ -2935,7 +2968,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
         throw: false,
       });
       if (res.status !== 200) return null;
-      const u: string = res.json.url;
+      const u = String((res.json as { url?: string } | null)?.url ?? "");
       return u.startsWith("http") ? u : this.webBase() + u;
     } catch { return null; }
   }
@@ -3000,9 +3033,10 @@ export default class NanalStampPlugin extends RecoveryLayer {
         headers: { "x-nanal-api-key": this.keyFor(this.teamNanal()) },
         throw: false,
       });
-      if (res.status === 200 && typeof res.json?.used_bytes === "number") {
+      const uj = res.json as { used_bytes?: number; pool_bytes?: number; quota_bytes?: number } | null;
+      if (res.status === 200 && typeof uj?.used_bytes === "number") {
         // C2: 팀 모드 응답은 pool_bytes(팀 풀 쿼터), 개인은 quota_bytes — 라벨은 그대로, 값만 팀 풀로.
-        this.lastUsage = { used: res.json.used_bytes, quota: res.json.pool_bytes ?? res.json.quota_bytes ?? 0 };
+        this.lastUsage = { used: uj.used_bytes, quota: uj.pool_bytes ?? uj.quota_bytes ?? 0 };
         // 쿼터는 첨부 크기와 달리 **누적되어 어느 날 갑자기** 걸린다. 봉인이 예고 없이 멎으면
         // 그 기간이 연구 기록의 공백으로 남는다 — 그래서 미리 알린다(단계마다 한 번씩).
         void this.warnQuotaNearFull();
@@ -3124,12 +3158,13 @@ export default class NanalStampPlugin extends RecoveryLayer {
         throw: false,
       });
       if (r.status !== 200) { new Notice(t.browserLoadFail); return; }
-      if (r.json?.ok !== true) {
-        const next = typeof r.json?.next_free_at === "number" ? fmtDate(new Date(r.json.next_free_at * 1000)) : "?";
+      const rj = r.json as { ok?: boolean; next_free_at?: number; session_id?: unknown } | null;
+      if (rj?.ok !== true) {
+        const next = typeof rj?.next_free_at === "number" ? fmtDate(new Date(rj.next_free_at * 1000)) : "?";
         new Notice(`${t.restoreVaultLimit(next)}\n${t.restoreBuySoon}`, 10000);
         return;
       }
-      sessionId = String(r.json.session_id);
+      sessionId = String(rj.session_id);
     } catch { new Notice(t.browserLoadFail); return; }
 
     const stamp = fmtDateTime(new Date()).replace(/[: ]/g, "-");
@@ -3165,8 +3200,8 @@ export default class NanalStampPlugin extends RecoveryLayer {
               await this.app.vault.create(dest, text);
               bytes += new TextEncoder().encode(text).byteLength;
             } else {
-              await this.app.vault.createBinary(dest, r.data as ArrayBuffer);
-              bytes += (r.data as ArrayBuffer).byteLength;
+              await this.app.vault.createBinary(dest, r.data);
+              bytes += r.data.byteLength;
             }
             done++;
             if (done % 10 === 0) progress.setMessage(t.restoreVaultRunning(done));
@@ -3281,14 +3316,15 @@ export default class NanalStampPlugin extends RecoveryLayer {
           url: `${this.base()}/attest/history?path=${ph}&limit=50${before != null ? `&before_seq=${before}` : ""}`,
           method: "GET", headers: { "x-nanal-api-key": this.settings.apiKey }, throw: false,
         });
-        if (r.status !== 200 || !Array.isArray(r.json?.rows)) break;
-        const rows = r.json.rows as Array<{ seq: number; received_at: number; file_hash: string }>;
+        const hj = r.json as { rows?: Array<{ seq: number; received_at: number; file_hash: string }>; has_more?: boolean } | null;
+        if (r.status !== 200 || !Array.isArray(hj?.rows)) break;
+        const rows = hj.rows;
         for (const row of rows) {
           if (typeof row.received_at !== "number" || typeof row.file_hash !== "string") continue;
           if (row.received_at <= noteTs) return { hash: row.file_hash, path: m.path, receivedAt: row.received_at }; // DESC — 첫 매치가 noteTs 이하 최신
           earliestAfter = { hash: row.file_hash, receivedAt: row.received_at }; // 마지막으로 남는 값 = 노트 이후 중 가장 이른 버전
         }
-        if (r.json.has_more !== true || rows.length === 0) break;
+        if (hj.has_more !== true || rows.length === 0) break;
         before = rows[rows.length - 1].seq;
       }
       if (earliestAfter) return { hash: earliestAfter.hash, path: m.path, receivedAt: earliestAfter.receivedAt };
@@ -3332,7 +3368,8 @@ export default class NanalStampPlugin extends RecoveryLayer {
         throw: false,
       });
       status = r.status;
-      if (status === 200 && typeof r.json?.dek === "string") return r.json.dek;
+      const kj = r.json as { dek?: unknown } | null;
+      if (status === 200 && typeof kj?.dek === "string") return kj.dek;
     } catch { /* 네트워크 예외 — 아래 일시 backoff */ }
     this.dekCache.delete(k); // 실패 Promise는 캐시에 남기지 않는다(성공만 유지) — 재시도는 dekDeny 만료 후
     console.error("[nanalstamp] storage key", status);
@@ -3457,10 +3494,10 @@ export default class NanalStampPlugin extends RecoveryLayer {
     const url = this.githubContentsUrl(path);
     let sha: string | undefined;
     const get = await requestUrl({ url, method: "GET", headers: this.githubHeaders(), throw: false });
-    if (get.status === 200) sha = get.json?.sha;
+    if (get.status === 200) sha = (get.json as { sha?: string } | null)?.sha;
     else if (get.status === 401 || get.status === 403) { new Notice(t.mirrorFail(String(get.status))); return false; }
     else if (get.status === 429) { new Notice(t.rateLimited); return false; }
-    const payload: any = {
+    const payload: { message: string; content: string; committer: { name: string; email: string }; sha?: string } = {
       message,
       content: typeof content === "string" ? toBase64(content) : arrayBufferToBase64(content),
       committer: { name: "nanalStamp", email: "mirror@nanalstamp.com" },
@@ -3476,7 +3513,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
     if (put.status === 200 || put.status === 201) return true;
     if (put.status === 429) { new Notice(t.rateLimited); return false; }   // 다음 sweep에서 재시도
     if (put.status === 409) return false;                                   // sha 경합 — 다음 sweep에서 재시도
-    new Notice(t.mirrorFail(`${put.status}: ${put.json?.message ?? "unknown"}`));
+    new Notice(t.mirrorFail(`${put.status}: ${String((put.json as { message?: unknown } | null)?.message ?? "unknown")}`));
     return false;
   }
 
@@ -3497,7 +3534,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
     if (res.status === 404) { await this.setTeamCustody(null); return false; } // 오프보딩 — custody 정리 후 조용히 중단
     if (res.status === 429) { new Notice(t.rateLimited); return false; }        // 다음 sweep 재시도
     if (res.status === 409) return false;                                       // 동시 수정 — 다음 sweep 재시도
-    if (res.status === 400) { console.error("[nanalstamp] team mirror rejected", path, res.json?.error ?? res.status); return false; }
+    if (res.status === 400) { console.error("[nanalstamp] team mirror rejected", path, (res.json as { error?: unknown } | null)?.error ?? res.status); return false; }
     console.error("[nanalstamp] team mirror failed", path, res.status);         // 503(서버 미설정) 등 — 다음 sweep 재시도
     return false;
   }
@@ -3531,11 +3568,11 @@ export default class NanalStampPlugin extends RecoveryLayer {
       if (res.status === 402) { new Notice(t.proOnly); this.openExternal("/pricing"); return; }
       if (res.status !== 200) { new Notice(t.linkFail(String(res.status))); return; }
       // 서버가 절대 URL(nanalstamp.com)을 반환 — 구버전 호환 위해 상대경로면 webBase 보정
-      const u: string = res.json.url;
+      const u = String((res.json as { url?: string } | null)?.url ?? "");
       const url = u.startsWith("http") ? u : this.webBase() + u;
-      try { await navigator.clipboard.writeText(url); } catch (_) { /* ignore */ }
+      try { await navigator.clipboard.writeText(url); } catch { /* ignore */ }
       new Notice(t.linkOk(url));
-    } catch (e: any) { new Notice(t.linkFail(e?.message ?? String(e))); }
+    } catch (e) { new Notice(t.linkFail(errMsg(e))); }
   }
 
   // 결제 시작 → pay 페이지 열기
@@ -3543,7 +3580,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
     if (!this.settings.apiKey) return new Notice(t.apiKeyMissing);
     try {
       // 한국어=Toss(KRW), 그 외=Stripe(USD)
-      const lang: Lang = this.settings.lang === "auto" ? pickLang() : (this.settings.lang as Lang);
+      const lang: Lang = this.settings.lang === "auto" ? pickLang() : this.settings.lang;
       const gateway = lang === "ko" ? "toss" : "lemonsqueezy";
       const res = await requestUrl({
         url: `${this.base()}/attest/checkout`,
@@ -3553,10 +3590,10 @@ export default class NanalStampPlugin extends RecoveryLayer {
         throw: false,
       });
       if (res.status !== 200) { new Notice(t.checkoutFail(String(res.status))); return; }
-      this.openExternal(res.json.checkout_url);
+      this.openExternal(String((res.json as { checkout_url?: string } | null)?.checkout_url ?? ""));
       // 결제는 외부 브라우저에서 완료 — 잠시 뒤 자격 갱신 시도(구독/크레딧 반영)
       window.setTimeout(() => void this.refreshEntitlement(), 20000);
-    } catch (e: any) { new Notice(t.checkoutFail(e?.message ?? String(e))); }
+    } catch (e) { new Notice(t.checkoutFail(errMsg(e))); }
   }
 
   // 이메일/비번 로그인 → API 키 자동 발급(무료 가입자). tier 반환.
@@ -3568,15 +3605,16 @@ export default class NanalStampPlugin extends RecoveryLayer {
       body: JSON.stringify({ email, password }),
       throw: false,
     });
-    if (res.status !== 200) throw new Error(res.json?.error || `HTTP ${res.status}`);
-    this.settings.apiKey = res.json.api_key;
+    const lj = res.json as { error?: string; api_key?: string; tier?: string } | null;
+    if (res.status !== 200) throw new Error(lj?.error || `HTTP ${res.status}`);
+    this.settings.apiKey = lj?.api_key ?? "";
     this.settings.accountEmail = email.trim(); // 계정 카드 표시용
     await this.saveSettings();
     // 로그인 직후 팀 프로파일 적용(fire-and-forget, 실패 무시). 자동 적용이 꺼져 있으면 트래픽 생략.
     if (this.settings.teamProfileEnabled) void this.fetchTeamProfile();
     // 4.3: custody 미러 정보도 로그인 직후 수신(연결·오프보딩 반영).
     void this.fetchTeamMirrorInfo();
-    return res.json.tier;
+    return lj?.tier ?? "";
   }
 
   /// 팀 계정으로 로그인해 **그 계정의 키만** 저장한다. 개인 계정은 건드리지 않는다.
@@ -3591,18 +3629,19 @@ export default class NanalStampPlugin extends RecoveryLayer {
       body: JSON.stringify({ email, password }),
       throw: false,
     });
-    if (res.status !== 200) throw new Error(res.json?.error || `HTTP ${res.status}`);
-    this.settings.teamApiKey = res.json.api_key;
+    const tj = res.json as { error?: string; api_key?: string; user_id?: unknown; tier?: string } | null;
+    if (res.status !== 200) throw new Error(tj?.error || `HTTP ${res.status}`);
+    this.settings.teamApiKey = tj?.api_key ?? "";
     this.settings.teamAccountEmail = email.trim();
     // 봉인 응답 검증에 쓸 계정 ID. 구서버가 안 주면 비워 두고, 그때는 검증을 건너뛴다
     // (확인 수단이 없다고 봉인을 되돌리면 그게 더 나쁘다 — verifySealAck 의 기존 규칙).
-    this.settings.teamClaimAccount = typeof res.json.user_id === "string" ? res.json.user_id : "";
+    this.settings.teamClaimAccount = typeof tj?.user_id === "string" ? tj.user_id : "";
     await this.saveSettings();
     this.resetTeamKeyCaches();
     // 팀 정보(루트·구조·custody)는 **팀 계정 것**을 봐야 한다 — 개인 계정에는 그 팀이 없다.
     if (this.settings.teamProfileEnabled) void this.fetchTeamProfile();
     void this.fetchTeamMirrorInfo();
-    return res.json.tier;
+    return tj?.tier ?? "";
   }
 
   /// 팀 계정 연결을 푼다 — 그 뒤로는 개인 키가 양쪽에 쓰인다(연결 전과 같다).
@@ -3666,7 +3705,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
   // 조용히 스킵(호출부가 결과 상태로 Notice를 결정). 200이면 applyTeamProfile로 반영.
   async fetchTeamProfile(): Promise<"applied" | "not-member" | "no-key" | "error"> {
     if (!this.settings.apiKey) return "no-key";
-    let res: any;
+    let res: RequestUrlResponse;
     try {
       res = await requestUrl({
         url: `${this.base()}/attest/team/profile`,
@@ -3676,22 +3715,23 @@ export default class NanalStampPlugin extends RecoveryLayer {
         headers: { "x-nanal-api-key": this.keyFor(true) },
         throw: false,
       });
-    } catch (_) { return "error"; }
+    } catch { return "error"; }
     if (res.status === 404) { await this.clearTeamState(); return "not-member"; }
     if (res.status !== 200) return "error";
-    const profile = res.json?.profile;
+    const pj = res.json as { profile?: unknown; role?: unknown; expired?: unknown } | null;
+    const profile = pj?.profile;
     // 역할은 프로파일 본문이 아니라 응답 최상위에 온다 — 팀을 떠나면 아래 404 분기에서 정리된다.
-    this.settings.teamRole = typeof res.json?.role === "string" ? res.json.role : "";
+    this.settings.teamRole = typeof pj?.role === "string" ? pj.role : "";
     // 팀이 만료되면 팀 보관이 막힌다(서버가 팀 경로 presign 에서 403). 그 사실을 알리지 않으면
     // 팀원은 원문이 보관되는 줄 안 채 계속 쓴다 — 개인 만료와 같은 수준으로 한 번 알린다.
-    const teamExpired = res.json?.expired === true;
+    const teamExpired = pj?.expired === true;
     if (teamExpired && !this.teamExpiredNotified) {
       this.teamExpiredNotified = true;
       new Notice(t.teamExpired, 15000);
     } else if (!teamExpired) {
       this.teamExpiredNotified = false;
     }
-    await this.applyTeamProfile(profile && typeof profile === "object" && !Array.isArray(profile) ? profile : {});
+    await this.applyTeamProfile(profile && typeof profile === "object" && !Array.isArray(profile) ? profile as Record<string, unknown> : {});
     return "applied";
   }
 
@@ -3701,7 +3741,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
   // C2: team_storage 필드(응답에 있으면)도 같은 타이밍에 갱신 — 구서버(필드 부재) → null → 현행 동작(하위 호환).
   async fetchTeamMirrorInfo(): Promise<"enabled" | "disabled" | "not-member" | "no-key" | "error"> {
     if (!this.settings.apiKey) return "no-key";
-    let res: any;
+    let res: RequestUrlResponse;
     try {
       res = await requestUrl({
         url: `${this.base()}/attest/team/mirror/info`,
@@ -3711,13 +3751,13 @@ export default class NanalStampPlugin extends RecoveryLayer {
         headers: { "x-nanal-api-key": this.keyFor(true) },
         throw: false,
       });
-    } catch (_) { await this.setTeamCustody(null); return "error"; }
+    } catch { await this.setTeamCustody(null); return "error"; }
     // C2: 404 = 서버가 비멤버 확정(퇴사·오프보딩) — 두 필드 모두 클리어(고착 방지). 안 지우면 teamStorage:"nanal"이
     // 남아 nanalActive 강제 true → 팀 라우트 전부 404 → 보존이 영구 조용히 실패 + 설정 잠김 + 회복 경로 없음.
     // catch/비-200은 transient(네트워크·서버 오류)일 수 있어 teamStorage 보존(현행 유지).
     if (res.status === 404) { await this.setTeamCustody(null, null); return "not-member"; }
     if (res.status !== 200) { await this.setTeamCustody(null); return "error"; }
-    const j = res.json ?? {};
+    const j = (res.json ?? {}) as { team_storage?: unknown; enabled?: unknown; org?: unknown; repo?: unknown };
     const teamStorage: "nanal" | null = j.team_storage === "nanal" ? "nanal" : null;
     if (j.enabled === true && typeof j.org === "string" && typeof j.repo === "string") {
       await this.setTeamCustody({ org: j.org, repo: j.repo }, teamStorage);
@@ -3775,7 +3815,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
       s.teamTemplates = (profile.templates as unknown[])
         .filter((x): x is { name: string; body: string } =>
           !!x && typeof x === "object" &&
-          typeof (x as any).name === "string" && typeof (x as any).body === "string")
+          typeof (x as { name?: unknown }).name === "string" && typeof (x as { body?: unknown }).body === "string")
         .map((x) => ({ name: x.name, body: x.body }));
     }
     s.teamProfileUpdatedAt = Date.now();
@@ -3961,9 +4001,9 @@ export default class NanalStampPlugin extends RecoveryLayer {
       const raw = JSON.parse(this.settings.knownFolderNames) as Partial<FolderNameSnapshot>;
       return {
         root: typeof raw.root === "string" ? raw.root : "",
-        projects: raw.projects && typeof raw.projects === "object" ? (raw.projects as Record<string, string>) : {},
+        projects: raw.projects && typeof raw.projects === "object" ? raw.projects : {},
       };
-    } catch (_) { return empty; }
+    } catch { return empty; }
   }
   private async saveFolderSnapshot(snap: FolderNameSnapshot): Promise<void> {
     this.settings.knownFolderNames = JSON.stringify(snap);
@@ -4029,7 +4069,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
         // vault.rename이 아니라 fileManager.renameFile — 이쪽이 노트 안의 링크까지 고쳐 준다.
         await this.app.fileManager.renameFile(from, r.to);
         moved++;
-      } catch (_e) { blocked.push(r.to); }
+      } catch { blocked.push(r.to); }
     }
     if (moved) new Notice(t.folderSyncMoved(moved));
     if (blocked.length) new Notice(t.folderSyncFailed(blocked.join(", ")), 10000);
@@ -4044,7 +4084,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
       body: JSON.stringify({ email, password }),
       throw: false,
     });
-    if (res.status >= 300) throw new Error(res.json?.error || `HTTP ${res.status}`);
+    if (res.status >= 300) throw new Error((res.json as { error?: string } | null)?.error || `HTTP ${res.status}`);
   }
 
   // 비밀번호 재설정 요청 — 이메일로 재설정 링크(웹 /reset?token=…) 발송.
@@ -4057,11 +4097,11 @@ export default class NanalStampPlugin extends RecoveryLayer {
       body: JSON.stringify({ email }),
       throw: false,
     });
-    if (res.status >= 300) throw new Error(res.json?.error || `HTTP ${res.status}`);
+    if (res.status >= 300) throw new Error((res.json as { error?: string } | null)?.error || `HTTP ${res.status}`);
   }
 
   // 서버에 해시 봉인 여부/증명 정보 조회(verify). 실패 시 null.
-  private async queryVerify(hash: string): Promise<any | null> {
+  private async queryVerify(hash: string): Promise<VerifyResp | null> {
     if (!this.settings.apiKey) return null;
     // 해시만 아는 자리라 **양쪽 계정에 묻는다**(팀 계정을 안 쓰면 한 번만 나간다).
     return this.askBothAccounts(async (key) => {
@@ -4072,15 +4112,16 @@ export default class NanalStampPlugin extends RecoveryLayer {
           headers: { "x-nanal-api-key": key },
           throw: false,
         });
-        if (res.status === 200 && res.json?.found) return res.json;
-      } catch (_) { /* ignore */ }
+        const j = res.json as VerifyResp | null;
+        if (res.status === 200 && j?.found) return j;
+      } catch { /* ignore */ }
       return null;
     });
   }
 
   // 해시별 verify 캐시. TTL 이내 재조회는 캐시 히트(서버 호출 절감).
   // 조회 실패(null)는 캐시하지 않아 다음에 재시도한다. 해시가 곧 내용 커밋먼트라 내용이 바뀌면 자연 무효화.
-  private async cachedVerify(hash: string): Promise<any | null> {
+  private async cachedVerify(hash: string): Promise<VerifyResp | null> {
     const now = Date.now();
     const hit = this.verifyCache.get(hash);
     if (hit && now - hit.ts < VERIFY_CACHE_TTL_MS) return hit.result;
@@ -4149,8 +4190,12 @@ export default class NanalStampPlugin extends RecoveryLayer {
         throw: false,
       });
       if (res.status === 200) {
-        if (Array.isArray(res.json?.plans)) this.pricingPlans = res.json.plans;
-        const ent = res.json?.entitlement;
+        const pj = res.json as {
+          plans?: Array<{ code: string; name: string; attachment_max_mb: number; amount_krw: number }>;
+          entitlement?: ({ attachment_max_mb?: number } & NonNullable<NanalStampPlugin["entitlement"]>) | null;
+        } | null;
+        if (Array.isArray(pj?.plans)) this.pricingPlans = pj.plans;
+        const ent = pj?.entitlement;
         if (ent) {
           // 요금제가 정한 첨부 상한. 서버가 tier→요금제를 이미 풀어 준다(플러그인이 되짚지 않는다).
           if (typeof ent.attachment_max_mb === "number" && ent.attachment_max_mb !== this.settings.attachmentMaxMb) {
@@ -4160,7 +4205,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
           return ent;
         }
       }
-    } catch (_) { /* ignore */ }
+    } catch { /* ignore */ }
     return null;
   }
 
@@ -4259,7 +4304,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
       const v = await this.cachedVerify(hash); // 해시별 캐시 경유(연타 전환·재방문 시 서버 호출 절감)
       if (v === null) { this.setStatus(t.overview(streak, total), t.queryFail(base), "solid"); return; }
       if (v.found) {
-        const seq = v.seq;
+        const seq = v.seq ?? 0;
         // 서버가 주는 epoch(초)를 사람이 읽는 시각으로. 없으면(구서버) 시각을 약속하지 않는
         // 짧은 문구를 쓴다 — `@ ` 뒤가 빈 채로 보이면 고장으로 읽힌다(오픈 전 검수 UX-13).
         const at = typeof v.received_at === "number" ? fmtDateTime(new Date(v.received_at * 1000)) : "";
@@ -4400,7 +4445,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
   }
 
   // 모달용 접근자
-  async proofFor(file: TFile): Promise<{ status: "sealed" | "changed" | "unsealed" | "pending" | "outscope"; seq?: number; receivedAt?: string; anchored?: boolean; blockHeight?: number; error?: boolean }> {
+  async proofFor(file: TFile): Promise<{ status: "sealed" | "changed" | "unsealed" | "pending" | "outscope"; seq?: number; receivedAt?: number; anchored?: boolean; blockHeight?: number; error?: boolean }> {
     if (!this.inSealScope(file.path)) return { status: "outscope" };
     const s = this.stateOf(file.path);
     if (s.dirty) return { status: "pending" };
@@ -4434,7 +4479,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
     if (!this.settings.apiKey) return null;
     const pathH = await hashPath(file.path);
     const cursor = typeof beforeSeq === "number" ? `&before_seq=${beforeSeq}` : "";
-    let res: any;
+    let res: RequestUrlResponse;
     try {
       res = await requestUrl({
         url: `${this.base()}/attest/history?path=${pathH}&limit=20${cursor}`,
@@ -4445,13 +4490,17 @@ export default class NanalStampPlugin extends RecoveryLayer {
     } catch { return null; }
     if (res.status === 404) return this.fetchHistoryFallback(file); // 구서버(엔드포인트 없음)
     if (res.status !== 200) return null;
-    const data = res.json;
+    const data = res.json as {
+      anchor?: { head_seq?: unknown; block_height?: unknown } | null;
+      rows?: Array<{ seq?: unknown; received_at?: unknown; file_hash?: unknown; block?: number | null }>;
+      has_more?: unknown; total?: unknown;
+    } | null;
     const anchorRaw = data?.anchor;
     const headSeq = typeof anchorRaw?.head_seq === "number" ? anchorRaw.head_seq : -1;
     const block: number | undefined = typeof anchorRaw?.block_height === "number" ? anchorRaw.block_height : undefined;
     const anchorConfirmed = typeof block === "number";
     const rows = (Array.isArray(data?.rows) ? data.rows : [])
-      .map((r: any) => {
+      .map((r) => {
         const seq = Number(r?.seq);
         // 신 서버: 행별 block(그 시점 확정 블록, 미확정 null). 구 서버 폴백: anchor 요약 + seq<=headSeq.
         const rowBlock: number | undefined = typeof r?.block === "number" ? r.block : undefined;
@@ -4465,7 +4514,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
           block: hasRowBlock ? rowBlock : (confirmed ? block : undefined),
         };
       })
-      .filter((r: any) => Number.isFinite(r.seq));
+      .filter((r) => Number.isFinite(r.seq));
     return {
       rows,
       hasMore: data?.has_more === true,
@@ -4488,7 +4537,12 @@ export default class NanalStampPlugin extends RecoveryLayer {
     try { hash = (await this.currentHashCached(file)) || ""; } catch { hash = ""; }
     if (!/^[0-9a-f]{64}$/i.test(hash)) hash = this.settings.sealedIndex[file.path] || "";
     if (!/^[0-9a-f]{64}$/i.test(hash)) hash = "0".repeat(64);
-    let data: any = null;
+    interface ChainRow { path?: string; seq?: unknown; received_at?: unknown; file_hash?: unknown }
+    interface ProofResp {
+      chain?: ChainRow[];
+      anchor?: { head_seq?: unknown; bitcoin?: { block_height?: number } } | null;
+    }
+    let data: ProofResp | null = null;
     try {
       const res = await requestUrl({
         url: `${this.base()}/attest/proof?hash=${hash}`,
@@ -4497,9 +4551,9 @@ export default class NanalStampPlugin extends RecoveryLayer {
         throw: false,
       });
       if (res.status !== 200) return null;
-      data = res.json;
+      data = res.json as ProofResp | null;
     } catch { return null; }
-    const chain: any[] = Array.isArray(data?.chain) ? data.chain : [];
+    const chain: ChainRow[] = Array.isArray(data?.chain) ? data.chain : [];
     const pathH = await hashPath(file.path);
     const anchorRaw = data?.anchor;
     const headSeq = typeof anchorRaw?.head_seq === "number" ? anchorRaw.head_seq : -1;
@@ -4539,7 +4593,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
 
   // 공용 호출 래퍼 — 네트워크 오류는 null(호출부가 조용한 실패로 처리, 봉인 플로우에 영향 0).
   // res.json은 비-JSON 응답에서 throw할 수 있어 여기서 방어적으로 흡수한다.
-  private async taskApi(method: string, path: string, body?: unknown): Promise<{ status: number; json: any } | null> {
+  private async taskApi(method: string, path: string, body?: unknown): Promise<{ status: number; json: Record<string, unknown> | null } | null> {
     try {
       const res = await requestUrl({
         url: `${this.base()}${path}`,
@@ -4549,10 +4603,10 @@ export default class NanalStampPlugin extends RecoveryLayer {
         body: body !== undefined ? JSON.stringify(body) : undefined,
         throw: false,
       });
-      let json: any = null;
-      try { json = res.json; } catch (_) { /* 비-JSON 본문 */ }
+      let json: Record<string, unknown> | null = null;
+      try { json = res.json as Record<string, unknown> | null; } catch { /* 비-JSON 본문 */ }
       return { status: res.status, json };
-    } catch (_) { return null; }
+    } catch { return null; }
   }
 
   // view=inbox(내가 수신자)|mine(내가 작성). 404 = 팀 미소속 → 폴링 조용히 비활성(§7b).
@@ -4573,9 +4627,9 @@ export default class NanalStampPlugin extends RecoveryLayer {
       this.taskNotMember = false;
       const parsed = parseTasksResponse(r.json);
       out.push(...parsed.tasks);
-      const more = r.json?.has_more === true && typeof r.json?.cursor === "string" && r.json.cursor;
-      if (!more) return out;
-      cursor = r.json.cursor;
+      const next = r.json?.has_more === true && typeof r.json?.cursor === "string" ? r.json.cursor : "";
+      if (!next) return out;
+      cursor = next;
     }
     return out;
   }
@@ -4619,7 +4673,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
   // 카드 액션·생성 공용 POST — 성공 시 응답 json, 실패 시 서버 error 문구 Notice 후 null.
   // silent=true면 실패해도 여기서 Notice를 띄우지 않는다(다중 수신자 fan-out처럼 호출부가
   // 결과를 모아 한 번에 요약 Notice를 띄우는 경우 — 개별 실패마다 뜨는 걸 막는다).
-  async taskPost(path: string, body?: unknown, opts?: { silent?: boolean }): Promise<any | null> {
+  async taskPost(path: string, body?: unknown, opts?: { silent?: boolean }): Promise<Record<string, unknown> | null> {
     const r = await this.taskApi("POST", path, body);
     if (!r) { if (!opts?.silent) new Notice(t.taskActionFail(t.taskLoadFail)); return null; }
     if (r.status !== 200) { if (!opts?.silent) new Notice(t.taskActionFail(String(r.json?.error ?? `HTTP ${r.status}`))); return null; }
@@ -4632,7 +4686,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
   /// 위 refreshTaskSealSummary 가 부르기 위한 것으로, 접근 범위를 넓히지 않기 위한 우회다.
   private async taskApiPublic(method: string, path: string) { return this.taskApi(method, path); }
 
-  async taskPatch(path: string, body: unknown): Promise<any | null> {
+  async taskPatch(path: string, body: unknown): Promise<Record<string, unknown> | null> {
     const r = await this.taskApi("PATCH", path, body);
     if (!r) { new Notice(t.taskActionFail(t.taskLoadFail)); return null; }
     if (r.status !== 200) { new Notice(t.taskActionFail(String(r.json?.error ?? `HTTP ${r.status}`))); return null; }
@@ -4850,7 +4904,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
       await new Promise((r) => window.setTimeout(r, NanalStampPlugin.TEMPLATE_SETTLE_MS));
       if (body) await this.app.vault.modify(f, body);
       return true;
-    } catch (_e) {
+    } catch {
       return !!this.app.vault.getAbstractFileByPath(path); // 이미 있었으면 만든 것이 아니다
     }
   }
@@ -4871,7 +4925,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
         if (r.status !== 200) continue;
         if (isBinaryPath(tp.path)) { await this.app.vault.createBinary(tp.path, r.arrayBuffer); made++; }
         else if (await this.createInert(tp.path, r.text)) made++;
-      } catch (_e) { /* 개별 실패는 건너뛴다 */ }
+      } catch { /* 개별 실패는 건너뛴다 */ }
     }
     return made;
   }
@@ -4964,7 +5018,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
 
   stopTaskSse(): void {
     this.taskSseActive = false;
-    try { this.taskSseAbort?.abort(); } catch (_) { /* 이미 닫힘 */ }
+    try { this.taskSseAbort?.abort(); } catch { /* 이미 닫힘 */ }
     this.taskSseAbort = null;
   }
 
@@ -4995,7 +5049,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
             ps = fed.state;
             if (fed.events.some((e) => e.event === "changed")) { void this.pollTasks(); void this.refreshProjects(); } // §3: 과제 변경도 같은 워터마크에 편승
           }
-        } catch (_) { /* 절단·네트워크 오류 — 백오프 재연결 */ }
+        } catch { /* 절단·네트워크 오류 — 백오프 재연결 */ }
         this.taskSseAbort = null;
         if (!this.taskSseActive) break;
         await new Promise<void>((res) => window.setTimeout(res, this.taskSseBackoffMs));
@@ -5032,7 +5086,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
     // 제목은 프래그먼트로 넘겨 span에 클래스를 심는다(MenuItem.dom은 비공식 필드라 못 붙을 수 있다).
     const header = (label: string): void => {
       menu.addItem((i) => {
-        const frag = document.createDocumentFragment();
+        const frag = createFragment();
         frag.createSpan({ cls: "nanalstamp-menu-header", text: label });
         i.setTitle(frag);
         // setIsLabel은 "선택 대상이 아닌 라벨"을 뜻하는 공식 API다 — disabled(비활성화된 기능)와
@@ -5050,7 +5104,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
     // 통일한다(빠진 봉인 발견·반려·원문 누락·봉인 보류 전부 같은 성격, 같은 모양).
     const warnItem = (title: string, cb: () => void, icon = "alert-triangle"): void => {
       menu.addItem((i) => {
-        const frag = document.createDocumentFragment();
+        const frag = createFragment();
         frag.createSpan({ cls: "nanalstamp-menu-warn", text: title });
         i.setTitle(frag).setIcon(icon).onClick(cb);
       });
@@ -5111,9 +5165,9 @@ export default class NanalStampPlugin extends RecoveryLayer {
     } else {
       item(t.checkMissingCmd, "shield-check", () => void this.checkMissingNow());
     }
-    item(t.sealCmd, ICON_ID, withActiveFile((f) => this.flush(f, "manual")));
+    item(t.sealCmd, ICON_ID, withActiveFile((f) => void this.flush(f, "manual")));
     item(t.proofCmd, "file-search", () => this.showProof());
-    item(t.anchorCmd, "anchor", () => this.anchorNow());
+    item(t.anchorCmd, "anchor", () => void this.anchorNow());
 
     // 노트 하나짜리 작업(증명서 PDF·공개 링크·특정 시점)은 여기서 뺐다 —
     // **제출 패키지가 이미 그것을 포함한다**: 범위에서 '이 노트만'을 고르면 그 노트의 원문·증명·
@@ -5230,7 +5284,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
         throw: false,
       });
       if (res.status !== 200) return;
-      const rows: any[] = res.json?.reviews ?? [];
+      const rows = (res.json as { reviews?: Array<{ status?: string; title?: string; rejected?: Array<{ seq: number; comment?: string }> }> } | null)?.reviews ?? [];
       const items: Array<{ seq: number; comment: string; title: string }> = [];
       for (const r of rows) {
         if (r.status !== "signed") continue;
@@ -5283,9 +5337,9 @@ export default class NanalStampPlugin extends RecoveryLayer {
     if (Platform.isDesktopApp && this.settings.taskSystemNotify) {
       try {
         const n = new Notification("nanalStamp", { body: text, requireInteraction: true });
-        n.onclick = () => { try { window.focus(); } catch (_) { /* 포커스 실패 무시 */ } void this.openTaskInbox(); };
+        n.onclick = () => { try { window.focus(); } catch { /* 포커스 실패 무시 */ } void this.openTaskInbox(); };
         return;
-      } catch (_) { /* OS 알림 불가(권한 등) — 아래 Notice 폴백 */ }
+      } catch { /* OS 알림 불가(권한 등) — 아래 Notice 폴백 */ }
     }
     new Notice(text); // 모바일·OS 알림 꺼짐·발송 실패 — 앱 안 toast 폴백
   }
@@ -5341,7 +5395,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
   }
 
   async loadSettings() {
-    const loaded = await this.loadData();
+    const loaded = (await this.loadData() ?? {}) as Partial<AttestSettings>;
     this.settings = Object.assign({}, DEFAULTS, loaded);
     this.settings.enabled = true; // 플러그인 활성화 = 봉인 활성 — 토글 UI 제거(과거 false 저장분 무력화)
     // C1 마이그레이션: 예전 dropdown "github" 선택자·legacy githubMirror 토글 → 고급 'GitHub 내보내기'로 1회 이관.
@@ -5354,10 +5408,10 @@ export default class NanalStampPlugin extends RecoveryLayer {
     // 2026-07-28 마이그레이션: 예전 기본값은 "포함 폴더가 비면 vault 전체"였다. 그 상태로 이미 쓰던
     // 사용자에게서 봉인을 조용히 멈추면 그 기간의 기록에 공백이 생긴다(봉인은 소급되지 않는다).
     // 그래서 **이미 봉인 경험이 있는 기존 설치**만 wholeVault=true로 이관하고, 새 설치는 false로 남긴다.
-    if (loaded && (loaded as Partial<AttestSettings>).sealWholeVault === undefined) {
-      const usedBefore = ((loaded as Partial<AttestSettings>).lifetimeCount ?? 0) > 0
-        || Object.keys((loaded as Partial<AttestSettings>).sealedIndex ?? {}).length > 0;
-      this.settings.sealWholeVault = usedBefore && !(loaded as Partial<AttestSettings>).includeFolders;
+    if (loaded && loaded.sealWholeVault === undefined) {
+      const usedBefore = (loaded.lifetimeCount ?? 0) > 0
+        || Object.keys(loaded.sealedIndex ?? {}).length > 0;
+      this.settings.sealWholeVault = usedBefore && !loaded.includeFolders;
     }
     this.settings.ledgerIndex = { ...(this.settings.ledgerIndex || {}) }; // DEFAULTS와 공유 참조 방지
     this.settings.mirrorIndex = { ...(this.settings.mirrorIndex || {}) };

@@ -6,11 +6,17 @@
 
 nanalStamp은 선택한 노트를 지켜보다가 노트가 정착되는 순간(타이핑을 멈추거나, 다른 노트로 넘어가거나, Obsidian을 닫을 때) **기기 안에서 SHA-256 해시를 계산**해 그 해시만 nanalStamp 서버로 보냅니다. 서버는 해시들을 사슬로 묶고 항목마다 서명한 뒤, 주기적으로 사슬 머리를 [OpenTimestamps](https://opentimestamps.org)를 통해 비트코인에 앵커링합니다. 그 결과는 "이 노트가 이 형태로 이 시점에 존재했다"는, **nanalStamp을 신뢰하지 않아도 독립적으로 검증 가능한 증명**입니다.
 
-![nanalStamp으로 봉인된 노트 — 상태바에 "봉인됨 · seq 8 · 앵커 대기"가 표시됩니다](images/sealed-note.png)
+![nanalStamp으로 봉인된 노트 — 상태바에 「봉인됨 · seq 1236 · 앵커 대기」가 표시됩니다](images/ko/sealed-note.png)
 
-| 모든 기능이 메뉴 하나에 | 노트별 증명·이력 |
-|---|---|
-| ![nanalStamp 리본 메뉴: 봉인, 증명, 제출 패키지, 보관 노트, 대시보드](images/menu.png) | ![노트 증명 창: 봉인 상태, 순번, 비트코인 앵커 상태, 복원 가능한 봉인 이력](images/note-proof.png) |
+![클로즈업 — 봉인 직후의 상태바](images/ko/statusbar.png)
+
+**모든 기능이 메뉴 하나에** — 리본의 씰 아이콘이 입구입니다:
+
+![nanalStamp 리본 메뉴: 업무·봉인·증명서·nanalStorage·현황·계정](images/ko/menu.png)
+
+**노트별 증명·이력** — 봉인 상태·순번·비트코인 앵커, 그리고 복원 가능한 봉인 이력:
+
+![노트 증명 창 — 봉인 이력 3건과 복원 버튼](images/ko/note-proof.png)
 
 ## 왜 오늘 시작해야 하나 — 과거는 소급해서 증명할 수 없습니다
 

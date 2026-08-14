@@ -8,9 +8,15 @@ nanalStamp watches the notes you choose and, whenever a note settles (you pause 
 
 ![A note sealed by nanalStamp — the status bar shows "Sealed · seq 8 · awaiting anchor"](images/sealed-note.png)
 
-| Everything lives in one menu | Per-note proof & history |
-|---|---|
-| ![The nanalStamp ribbon menu: sealing, proof, submission package, stored notes, dashboard](images/menu.png) | ![Note proof dialog: sealed state, sequence, Bitcoin anchor status, seal history with restore](images/note-proof.png) |
+![Close-up — the status bar right after sealing](images/statusbar.png)
+
+**Everything lives in one menu** — the ribbon seal icon is the entry point:
+
+![The nanalStamp ribbon menu: tasks, sealing, certificates, stored notes, dashboard, account](images/menu-close.png)
+
+**Per-note proof & history** — sealed state, sequence, Bitcoin anchor status, and every sealed version with restore:
+
+![Note proof dialog with seal history and restore buttons](images/note-proof-close.png)
 
 ## Why start today — you can't prove the past retroactively
 

@@ -1,5 +1,7 @@
 # nanalStamp
 
+**English**: this document · **한국어**: [README.ko.md](README.ko.md)
+
 Seal your notes with tamper-proof timestamps — anchored to the Bitcoin blockchain — **without ever uploading a single word of your content.**
 
 nanalStamp watches the notes you choose and, whenever a note settles (you pause typing, switch away, or close Obsidian), it computes a **SHA-256 hash on your device** and sends only that hash to the nanalStamp server. The server chains your hashes, signs each entry, and periodically anchors the chain head into Bitcoin via [OpenTimestamps](https://opentimestamps.org). The result is independently verifiable proof that a given note existed, in a given form, at a given time — proof that does not depend on trusting nanalStamp.

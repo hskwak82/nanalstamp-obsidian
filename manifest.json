@@ -3,7 +3,7 @@
   "name": "nanalStamp",
   "version": "1.5.3",
   "minAppVersion": "1.7.2",
-  "description": "Seals each note with a tamper-proof, content-private timestamp anchored to Bitcoin — proof of existence and an unbroken edit history for your research notes, day by day.",
+  "description": "Seals each note with a tamper-proof, content-private timestamp anchored to Bitcoin — proof of existence, unbroken version history, and a local git backup for your research notes.",
   "author": "nanalLabs",
   "authorUrl": "https://nanalstamp.com",
   "isDesktopOnly": true

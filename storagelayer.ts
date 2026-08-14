@@ -427,8 +427,17 @@ export abstract class StorageLayer extends NanalStampBase {
     // 분기·Notice·상태바는 markAuthFailed 가 flush 의 401 과 똑같이 처리한다(P-03).
     // **presign 응답만** 본다: 아래 PUT 은 S3 presigned URL 이라 403 이 서명·만료 문제일 수 있고,
     // 그것으로 키를 죽이면 멀쩡한 계정의 보관이 통째로 멈춘다.
-    if (pre.status === 401 || pre.status === 403) { this.markAuthFailed(team); return false; }
+    if (pre.status === 401) { this.markAuthFailed(team); return false; }
     const prej = pre.json as { error?: unknown; exists?: boolean; url?: string } | null;
+    if (pre.status === 403) {
+      // 403 은 키(인증)가 아니라 **자격 문제**다 — 개인 presign 의 403 은 "pro required"(FREE·만료)와
+      // "hash not sealed" 뿐이다(서버 blobs.rs). 키 거부로 오판하면 authFailed 가 서서 **봉인 전체가
+      // 멈춘다**(2026-08-14 실측: 신규 FREE 계정 전환 직후 팀 잔재로 presign 이 나가 403 → "키 거부" 배너).
+      // 스토리지만 1시간 물러난다 — 자격은 refreshEntitlement·팀 상태 재수신이 곧 바로잡는다.
+      this.storageQuotaBackoffUntil = Date.now() + 3_600_000;
+      console.error("[nanalstamp] storage presign forbidden — 스토리지만 중단", prej?.error ?? "");
+      return false;
+    }
     if (pre.status !== 200) { console.error("[nanalstamp] storage presign", pre.status, prej?.error ?? ""); return false; }
     if (prej?.exists) return true; // 이미 저장됨(콘텐츠주소 중복제거)
     const put = await this.requestWithOneRetry(() => requestUrl({

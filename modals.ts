@@ -481,17 +481,23 @@ export class OnboardingScopeModal extends NanalModal {
     contentEl.createEl("p", { text: t.onboardScopeIntro, cls: "setting-item-description" });
 
     // 섹션 0 — **어디를 봉인할지**(2026-07-28). 이 선택 전에는 봉인이 시작되지 않으므로 맨 위에 둔다.
-    // 팀 루트가 있으면 범위가 이미 정해져 있으니 이 섹션은 뜻이 없다.
-    if (!this.plugin.teamRoot()) {
+    // 팀 루트가 있어도 숨기지 않는다(2026-08-14): 설정탭 봉인 범위와 **같은 배너·같은 트리**여야 한다.
+    // 숨기면 아래 "아카이브 폴더"의 [폴더 선택](OS 탐색기 — vault 밖 경로라 그게 맞는 자리)만 남아
+    // 봉인 폴더 선택으로 오인된다(실측). 팀은 "이미 팀 구조가 봉인된다"를 배너로 말하고
+    // 개인 폴더 추가만 연다 — 트리(FolderTreeModal)는 설정탭과 같은 화면이다.
+    {
+      const troot = this.plugin.teamRoot();
       new Setting(contentEl).setName(t.onboardScopePickName).setHeading();
+      if (troot) contentEl.createDiv({ cls: "nanalstamp-scope-note", text: t.scopeTeamRoot(troot) });
       const warnEl = contentEl.createEl("p", { cls: "setting-item-description mod-warning" });
       const paint = () => {
-        const picked = this.draftWholeVault || !!this.plugin.settings.includeFolders;
+        // 팀 루트는 그 자체로 봉인 범위다 — 경고("아직 안 골랐다")는 팀 없는 계정에만 뜬다.
+        const picked = !!troot || this.draftWholeVault || !!this.plugin.settings.includeFolders;
         warnEl.setText(picked ? "" : t.onboardScopeNoneWarn);
         warnEl.toggle(!picked);
       };
       new Setting(contentEl)
-        .setName(t.onboardScopePickDesc)
+        .setName(troot ? t.onboardScopeTeamPickDesc : t.onboardScopePickDesc)
         .addButton((b) => b.setButtonText(t.onboardScopePickBtn).onClick(() => {
           // 트리에서 고르면 includeFolders가 채워진다 — 닫히고 나서 경고를 다시 칠한다.
           this.plugin.openFolderScopePicker(() => paint());

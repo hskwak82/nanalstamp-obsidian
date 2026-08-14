@@ -663,17 +663,12 @@ export class NanalStampSettingTab extends PluginSettingTab {
 
     // ── 기타(템플릿·언어) ────────────────────────────────────────────────
     new Setting(body).setName(t.miscHead).setHeading();
-    new Setting(body)
-      .setName(t.tplEnableName)
-      .setDesc(t.tplEnableDesc)
-      .addToggle((tg) =>
-        tg.setValue(s.templatesEnabled).onChange(async (v) => {
-          s.templatesEnabled = v;
-          await this.plugin.saveSettings();
-        })
-      );
-    this.text(body, t.tplFolderName, t.tplFolderDesc, "noteFolder");
-    this.text(body, t.digestFolderName, t.digestFolderDesc, "digestFolder");
+    // 개발노트 템플릿 토글·폴더는 잠정 회수(2026-08-14) — 템플릿 원고가 아직 없는 상태에서
+    // 설정만 노출되면 "켰는데 아무것도 없다"가 된다. loadSettings 의 강제 false 와 세트.
+    // digest 등록부는 팀 기능(team_digests) — 개인 계정에는 뜻이 없어 팀 소속일 때만 보인다.
+    if (s.teamProfileUpdatedAt > 0) {
+      this.text(body, t.digestFolderName, t.digestFolderDesc, "digestFolder");
+    }
     new Setting(body)
       .setName(t.langName)
       .setDesc(t.langDesc)

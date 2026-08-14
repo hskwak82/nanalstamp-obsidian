@@ -269,7 +269,7 @@ const DEFAULTS: AttestSettings = {
   lastSeenMtime: 0,
   includeFolders: "",
   excludeFolders: "",
-  templatesEnabled: true,
+  templatesEnabled: false,
   noteFolder: "",
   digestFolder: "digests",
   onboarded: false,
@@ -626,14 +626,17 @@ export default class NanalStampPlugin extends RecoveryLayer {
     this.addCommand({ id: "buy-credit", name: t.buyCreditCmd, callback: () => this.startCheckout("cert_single") });
     this.addCommand({ id: "password-reset", name: t.resetCmd, callback: () => new PasswordResetModal(this.app, this).open() });
 
-    // 개발노트 템플릿(선택적 편의) 명령
-    this.addCommand({ id: "new-dev-note", name: t.tplNewCmd, callback: () => this.newDevNote() });
-    for (const key of ["bug", "decision", "trap", "cont"]) {
-      this.addCommand({
-        id: `insert-${key}`,
-        name: t.tplInsCmd(`${tpl.cats[key].emoji} ${tpl.cats[key].label}`),
-        callback: () => this.insertEntry(key),
-      });
+    // 개발노트 템플릿(선택적 편의) 명령 — 잠정 회수 중(loadSettings 강제 false)이라 등록되지 않는다.
+    // 되살릴 때: loadSettings 의 강제 해제 + 설정탭 토글 복원과 세트로.
+    if (this.settings.templatesEnabled) {
+      this.addCommand({ id: "new-dev-note", name: t.tplNewCmd, callback: () => this.newDevNote() });
+      for (const key of ["bug", "decision", "trap", "cont"]) {
+        this.addCommand({
+          id: `insert-${key}`,
+          name: t.tplInsCmd(`${tpl.cats[key].emoji} ${tpl.cats[key].label}`),
+          callback: () => this.insertEntry(key),
+        });
+      }
     }
     // 3.2: 조직(팀) 템플릿 — 수신·캐시된 것을 하드코딩 템플릿과 나란히 삽입 명령으로 노출("팀:" 접두).
     // 강제 없이 본문 삽입만. 캐시가 0개면 이 루프는 아무것도 등록하지 않아 기존 동작과 동일.
@@ -643,10 +646,9 @@ export default class NanalStampPlugin extends RecoveryLayer {
       this.addCommand({
         id: `insert-team-${i}`,
         name: t.tplInsCmd(`${t.teamTplPrefix}${tt.name}`),
-        editorCallback: (ed) => {
-          if (!this.settings.templatesEnabled) { new Notice(t.tplOff); return; }
-          ed.replaceSelection(body);
-        },
+        // 개인 템플릿 토글(templatesEnabled)을 보지 않는다 — 팀 템플릿은 조직이 배포한 것이라
+        // 개인 편의 기능의 잠정 회수(2026-08-14)에 딸려 죽으면 안 된다.
+        editorCallback: (ed) => { ed.replaceSelection(body); },
       });
     });
 
@@ -1257,7 +1259,11 @@ export default class NanalStampPlugin extends RecoveryLayer {
     this.settings.reconcileAt = undefined;   // 이 계정 기준으로 다시 대조해야 한다
     this.reconcilePending = [];
     this.states.clear();                     // s.lastHash 잔존 시 flush 가 no-op 이 된다
-    // 봉인 범위와 시작 시점은 **이 계정으로 로그인한 사람이 정한다.** 처음 로그인과 같은 물음이다.
+    // 팀 상태(루트·custody·teamStorage·팀 키)도 이전 계정 것이다 — 새 계정의 소속은 fetchTeamProfile
+    // 이 다시 정한다. 남기면 teamStorage("nanal") 가 nanalActive 를 켠 채 FREE 새 계정으로 presign
+    // 이 나가 403 을 맞고, 그것이 "키 거부"로 표시되며 봉인 전체가 멈췄다(2026-08-14 신규 가입 실측).
+    // 필드 대입은 clearTeamState 첫 await 전에 동기로 끝난다 — 이 자리에서 곧바로 효력이 있다.
+    void this.clearTeamState(true);
     // 예전에는 여기서 곧바로 백필을 돌려 옛 노트를 **오늘 날짜로** 다시 봉인했다 —
     // 그건 우리가 정할 일이 아니었다(2026-07-31 지적).
     this.settings.scopeChosen = false;
@@ -3544,6 +3550,9 @@ export default class NanalStampPlugin extends RecoveryLayer {
   private webBase() { return this.base().replace("://api.", "://"); }
 
   openExternal(path: string) {
+    // /pricing 은 포털이 미로그인 방문자를 회원가입 탭으로 보낸다 — 플러그인에서 온 사람이
+    // 이미 계정이 있으면(키 보유) 로그인 탭이 맞으므로 출처를 붙여 알린다(2026-08-14 지적).
+    if (path === "/pricing" && this.settings.apiKey) path = "/pricing?src=plugin";
     const url = path.startsWith("http") ? path : this.webBase() + path;
     window.open(url, "_blank");
   }
@@ -3670,10 +3679,11 @@ export default class NanalStampPlugin extends RecoveryLayer {
   ///
   /// 지울 것이 없으면 **조용히 지나간다** — 팀에 속한 적 없는 개인 사용자는 이 경로를 매번
   /// 지나므로, 저장·안내가 폴링마다 반복되면 안 된다.
-  private async clearTeamState(): Promise<void> {
+  private async clearTeamState(silent = false): Promise<void> {
     const s = this.settings;
     const had = !!(s.teamRole || s.teamStructure || s.teamApiKey || s.knownFolderNames
-                   || s.teamTemplates.length || this.teamProjects.length);
+                   || s.teamTemplates.length || this.teamProjects.length
+                   || s.teamStorage || s.teamCustody);
     if (!had) return;
     const hadTeamAccount = !!s.teamApiKey;
     // 봉인 범위는 **건드리지 않는다.** 팀 루트는 그 자체로 팀 봉인 범위였고(inFolderScopePure의
@@ -3688,6 +3698,10 @@ export default class NanalStampPlugin extends RecoveryLayer {
     s.teamAttachmentMaxMB = null;
     s.knownFolderNames = "";     // 옛 팀 이름 기준 이동 제안이 되살아나지 않게
     s.teamApiKey = ""; s.teamAccountEmail = ""; s.teamClaimAccount = "";
+    // custody·팀 스토리지도 **첫 await 전에** 동기로 끊는다 — teamStorage 가 "nanal" 로 남아 있는
+    // 한 nanalActive() 가 참이라, 아래 saveSettings 를 기다리는 사이에도 presign 이 나갈 수 있다
+    // (2026-08-14: 그 presign 403 이 "키 거부"로 오판된 것이 이 정리를 만든 이유다).
+    s.teamCustody = null; s.teamStorage = null;
     this.teamProjects = [];
     // 미룬 이동은 따로 들고 있지 않다 — pendingFolderRenames()가 teamStructure·knownFolderNames
     // 로부터 그때그때 계산한다. 둘을 비웠으니 자동으로 빈 목록이 된다.
@@ -3698,7 +3712,9 @@ export default class NanalStampPlugin extends RecoveryLayer {
     this.resetTeamKeyCaches();
     await this.setTeamCustody(null, null);
     // 조용히 지우면 "왜 팀 폴더가 안 생기지"가 된다 — 무슨 일이 있었는지 한 번 알린다.
-    new Notice(hadTeamAccount ? t.teamLeftWithAccount : t.teamLeft, 12000);
+    // 단 계정 전환(checkAccountSwitch)이 부를 때는 침묵한다 — "계정이 바뀌었습니다"가 이미 떴는데
+    // "팀에서 나갔습니다"까지 겹치면 새 계정이 팀에서 쫓겨난 것처럼 읽힌다.
+    if (!silent) new Notice(hadTeamAccount ? t.teamLeftWithAccount : t.teamLeft, 12000);
   }
 
   // 3.2: 팀 프로파일 수신 — GET /attest/team/profile (멤버 키). 404(팀 미소속)·비200·네트워크 오류는
@@ -5398,6 +5414,9 @@ export default class NanalStampPlugin extends RecoveryLayer {
     const loaded = (await this.loadData() ?? {}) as Partial<AttestSettings>;
     this.settings = Object.assign({}, DEFAULTS, loaded);
     this.settings.enabled = true; // 플러그인 활성화 = 봉인 활성 — 토글 UI 제거(과거 false 저장분 무력화)
+    // 개발노트 템플릿 잠정 회수(2026-08-14): 원고가 없는 상태라 명령·설정을 숨긴다(과거 true 저장분 무력화).
+    // 되살릴 때 이 줄과 명령 등록 조건·설정탭 토글을 함께 해제할 것.
+    this.settings.templatesEnabled = false;
     // C1 마이그레이션: 예전 dropdown "github" 선택자·legacy githubMirror 토글 → 고급 'GitHub 내보내기'로 1회 이관.
     // (병행 허용 모델 — GitHub는 탈출구, nanal이 주 스토리지)
     const legacyBackend = (loaded as Partial<AttestSettings> | null)?.storageBackend as string | undefined;

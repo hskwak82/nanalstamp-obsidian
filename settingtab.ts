@@ -86,8 +86,8 @@ export class NanalStampSettingTab extends PluginSettingTab {
     const cur = this.plugin.manifest.version;
     const known = this.plugin.settings.latestKnownVersion;
     const upToDate = !!known && !this.plugin.updateAvailable();
-    const foot = containerEl.createDiv({ cls: "setting-item-description" });
-    foot.style.marginTop = "18px";
+    // 인라인 스타일 금지(스토어 심사 no-static-styles-assignment — 1.5.6 이 이걸로 Failed).
+    const foot = containerEl.createDiv({ cls: "setting-item-description nanalstamp-version-foot" });
     foot.setText(t.versionLine(cur) + (upToDate ? ` · ${t.versionLatest}` : ""));
   }
 

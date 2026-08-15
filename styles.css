@@ -1197,3 +1197,6 @@ body.nanalstamp-col-resizing, body.nanalstamp-col-resizing * { cursor: col-resiz
 
 /* 온보딩 봉인 범위의 팀 배너 — 설정탭 봉인 범위 배너와 같은 톤(클래스판, 인라인 스타일 금지) */
 .nanalstamp-scope-note { padding: 8px 10px; margin: 4px 0 8px; border-radius: 6px; font-size: 12px; background: var(--background-modifier-hover); color: var(--text-muted); }
+
+/* 설정탭 하단 버전 줄 — 인라인 스타일이면 심사 no-static-styles-assignment 에 걸린다(1.5.6 Failed) */
+.nanalstamp-version-foot { margin-top: 18px; }

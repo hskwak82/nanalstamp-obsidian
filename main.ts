@@ -15,7 +15,7 @@ import { TaskItem, TaskReply, RosterMember, personDisplay, parseTasksResponse, p
 import type { TaskViewPrefs } from "./taskview";
 // 번역 사전은 i18n.ts 소유 — `t`/`tpl`은 setLang()이 재대입하는 live binding이다(재대입은 i18n.ts에서만).
 import { t, tpl, pickLang, setLang } from "./i18n";
-import { fmtDate, fmtDateTime } from "./fmtutil";
+import { fmtDate, fmtDateTime, verNewer } from "./fmtutil";
 import { ICON_ID, ARCHIVE_SOURCE_VIEW_TYPE, NOTE_BROWSER_VIEW_TYPE, DASHBOARD_VIEW_TYPE, TASK_INBOX_VIEW_TYPE, TASK_POLL_MS, TASK_SSE_RETRY_MIN_MS, TASK_SSE_RETRY_MAX_MS, ARCHIVE_INLINE_MAX } from "./constants";
 import { defaultArchivePath, errMsg, nodeReq, parseFolders, sha256Hex, sha256HexBytes, PATH_HASH_PREFIX, hashVaultName, hashPath, toBase64, basenameOf, safeName } from "./pathutil";
 import { NanalStampSettingTab, FolderTreeModal } from "./settingtab";
@@ -230,6 +230,12 @@ export interface AttestSettings {
   githubExport: boolean;           // C1: 고급 — GitHub 내보내기(탈출구, nanal과 병행 가능). 기존 미러 코드 경로 재사용
   nanalIndex: Record<string, string>;         // 노트경로 → nanal 스토리지 업로드 완료된 봉인 해시(mirrorIndex와 동형)
   scopeChosen: boolean;         // 시작 범위 모달 완료 여부 — 로그인 직후·업데이트 후 첫 로드에 1회 트리거, 선택 후 다시 안 뜸
+  /** 범위 스냅샷의 vault 식별자(난수, 최초 동기화 때 1회 생성) — 한 계정을 vault 여럿이 쓸 때
+   *  서로의 스냅샷을 "바뀌었다"로 보고 번갈아 봉인하는 핑퐁을 막는다(서버 0035와 짝). */
+  scopeVaultId: string;
+  /** 최신 릴리스 태그(미러 repo 실측)·확인 시각 — 하루 1회만 물어보고 그 사이는 캐시. */
+  latestKnownVersion: string;
+  latestVersionCheckedAt: number;
   /** vault 전체 봉인을 **명시적으로** 선택했는가(2026-07-28). 포함 폴더가 비고 팀 루트도 없을 때만 의미가 있다.
    *  기본 false = 범위를 고르기 전에는 아무것도 봉인하지 않는다(sealscope.inFolderScopePure 주석 참조). */
   sealWholeVault: boolean;
@@ -322,6 +328,9 @@ const DEFAULTS: AttestSettings = {
   githubExport: false,
   nanalIndex: {},
   scopeChosen: false,
+  scopeVaultId: "",
+  latestKnownVersion: "",
+  latestVersionCheckedAt: 0,
   sealWholeVault: false,
   nanalBackfill: true,
   nanalSince: 0,
@@ -1502,7 +1511,15 @@ export default class NanalStampPlugin extends RecoveryLayer {
     this.scopeSyncing = true;
     try {
       const base = this.settings.serverUrl.replace(/\/$/, "");
-      const head = await requestUrl({ url: `${base}/attest/scope`, method: "GET",
+      // vault 식별자 — 최초 1회 생성해 data.json 에 남긴다. 서버는 이 값의 뜻을 모른다
+      // (vault 이름은 개인정보라 평문으로 보내지 않는다 — 이름은 암호화된 문서 안에만).
+      if (!this.settings.scopeVaultId) {
+        this.settings.scopeVaultId = crypto.randomUUID();
+        await this.saveSettings();
+      }
+      const vk = this.settings.scopeVaultId;
+      const head = await requestUrl({
+        url: `${base}/attest/scope?vault_key=${encodeURIComponent(vk)}`, method: "GET",
         headers: { "x-nanal-api-key": this.settings.apiKey }, throw: false });
       if (head.status !== 200) return;
       const headBody = head.json as { latest?: { body_hash?: string; doc_hash?: string } | null } | null;
@@ -1536,7 +1553,8 @@ export default class NanalStampPlugin extends RecoveryLayer {
       const r = await requestUrl({ url: `${base}/attest/scope`, method: "POST",
         contentType: "application/json",
         headers: { "x-nanal-api-key": this.settings.apiKey },
-        body: JSON.stringify({ hash, body_hash: bodyHash, ...(encDoc ? { enc_doc: encDoc } : {}) }),
+        body: JSON.stringify({ hash, body_hash: bodyHash, vault_key: vk,
+          ...(encDoc ? { enc_doc: encDoc } : {}) }),
         throw: false });
       const rBody = r.json as { unchanged?: boolean; n?: number } | null;
       if (r.status === 200 && !rBody?.unchanged) {
@@ -3550,6 +3568,34 @@ export default class NanalStampPlugin extends RecoveryLayer {
   base() { return this.settings.serverUrl.replace(/\/$/, ""); } // 모달·뷰에서도 사용(재구성 status 등)
   // 사용자 페이지 도메인: API(api.nanalstamp.com)와 분리 → nanalstamp.com
   private webBase() { return this.base().replace("://api.", "://"); }
+
+  // 최신 버전 확인 — 스토어 배포의 원천인 미러 repo 의 최신 릴리스 태그.
+  // 하루 1회만 물어본다(설정을 자주 열어도 GitHub 레이트리밋을 건드리지 않게).
+  async checkLatestVersion(): Promise<string | null> {
+    const DAY = 24 * 60 * 60 * 1000;
+    const s = this.settings;
+    if (s.latestVersionCheckedAt && Date.now() - s.latestVersionCheckedAt < DAY) {
+      return s.latestKnownVersion || null;
+    }
+    try {
+      const r = await requestUrl({
+        url: "https://api.github.com/repos/hskwak82/nanalstamp-obsidian/releases/latest",
+        throw: false });
+      const tag = r.status === 200 ? String((r.json as { tag_name?: string })?.tag_name || "") : "";
+      if (tag) {
+        s.latestKnownVersion = tag;
+        s.latestVersionCheckedAt = Date.now();
+        await this.saveSettings();
+      }
+    } catch (e) { console.debug("[nanalstamp] version check skip", e); }
+    return s.latestKnownVersion || null;
+  }
+
+  /// 업데이트가 필요하면 그 버전, 최신이면 null.
+  updateAvailable(): string | null {
+    const latest = this.settings.latestKnownVersion;
+    return latest && verNewer(latest, this.manifest.version) ? latest.replace(/^v/i, "") : null;
+  }
 
   openExternal(path: string) {
     // /pricing 은 포털이 미로그인 방문자를 회원가입 탭으로 보낸다 — 플러그인에서 온 사람이

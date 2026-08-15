@@ -6,6 +6,18 @@
 export function pad2(n: number): string {
   return String(n).padStart(2, "0");
 }
+
+/// a 가 b 보다 새 버전인가 — "1.5.10" > "1.5.9" 같은 숫자 비교(문자열 비교는 여기서 틀린다).
+/// 태그의 "v" 접두, 자릿수 차이("1.6" vs "1.5.5")를 허용한다. 파싱 불능 조각은 0.
+export function verNewer(a: string, b: string): boolean {
+  const parse = (v: string) => v.replace(/^v/i, "").split(".").map((x) => parseInt(x, 10) || 0);
+  const pa = parse(a), pb = parse(b);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const x = pa[i] ?? 0, y = pb[i] ?? 0;
+    if (x !== y) return x > y;
+  }
+  return false;
+}
 export function fmtDate(d: Date): string {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }

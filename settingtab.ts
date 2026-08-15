@@ -43,6 +43,22 @@ export class NanalStampSettingTab extends PluginSettingTab {
       const warn = containerEl.createDiv({ cls: "nanalstamp-banner-warn" });
       warn.setText(t.mobileSealNeedPlan);
     }
+    // 업데이트 배너 — **있을 때만** 맨 위에. 최신일 때 "최신입니다"를 상시 띄우면 소음이다.
+    // 판정은 캐시로 즉시 그리고, 하루 1회 갱신이 결과를 바꿨을 때만 한 번 다시 그린다.
+    const newer = this.plugin.updateAvailable();
+    if (newer) {
+      const up = containerEl.createDiv({ cls: "nanalstamp-banner-warn" });
+      up.setText(t.updateBanner(newer) + " ");
+      const openBtn = up.createEl("a", { text: t.updateOpenBtn });
+      openBtn.onclick = () => {
+        // Obsidian 의 커뮤니티 플러그인 화면이 곧 업데이트 화면이다 — 우리가 재구현하지 않는다.
+        (this.app as unknown as { setting: { openTabById(id: string): void } })
+          .setting.openTabById("community-plugins");
+      };
+    }
+    void this.plugin.checkLatestVersion().then(() => {
+      if (this.plugin.updateAvailable() !== newer) this.display();
+    });
     // 키 거부(폐기·만료) — 정상 계정 카드를 그대로 두면 회복 경로가 없다(P-02).
     // 로그아웃을 강요하지 않는다: 시작 카드의 로그인이 성공하면 accountLogin→saveSettings가
     // apiKey를 교체하며 authFailed를 스스로 리셋한다(saveSettings의 lastApiKey 감지).
@@ -50,15 +66,29 @@ export class NanalStampSettingTab extends PluginSettingTab {
       const warn = containerEl.createDiv({ cls: "nanalstamp-banner-warn" });
       warn.setText(t.authFailedBanner(this.plugin.settings.accountEmail || ""));
       this.renderStartCard(containerEl, true); // 이메일/비밀번호 + [로그인] — 회복 톤으로 재사용
+      this.renderVersionFooter(containerEl);
       return;
     }
     if (!this.plugin.settings.apiKey) {
       this.renderStartCard(containerEl); // (A) 미로그인 — 이 카드 외에는 아무것도 렌더하지 않는다(언어 포함)
+      this.renderVersionFooter(containerEl);
       return;
     }
     this.renderAccountCard(containerEl);      // (B)-1 계정
     this.renderIntegrationsCard(containerEl); // (B)-2 연동(GitHub·팀)
     this.renderAdvanced(containerEl);         // (B)-3 고급 — 기본 닫힘
+    this.renderVersionFooter(containerEl);    // 맨 아래 버전 줄 — 관례상 푸터
+  }
+
+  /// 하단 버전 줄 — `nanalStamp v1.5.5 · 최신`. "최신"은 실제로 확인된 날에만 붙인다
+  /// (확인 전이거나 실패면 버전만 — 모르는 것을 아는 척하지 않는다).
+  private renderVersionFooter(containerEl: HTMLElement) {
+    const cur = this.plugin.manifest.version;
+    const known = this.plugin.settings.latestKnownVersion;
+    const upToDate = !!known && !this.plugin.updateAvailable();
+    const foot = containerEl.createDiv({ cls: "setting-item-description" });
+    foot.style.marginTop = "18px";
+    foot.setText(t.versionLine(cur) + (upToDate ? ` · ${t.versionLatest}` : ""));
   }
 
   // (A) 시작 카드: 한 줄 소개 + 이메일/비밀번호 + [가입][로그인] + 재설정 텍스트 링크
@@ -423,8 +453,11 @@ export class NanalStampSettingTab extends PluginSettingTab {
       for (const h of [t.scopeHistN, t.scopeHistWhen, t.scopeHistProof, t.scopeHistScope]) {
         head.createEl("th", { text: h });
       }
+      // 설정 화면은 "지금 어떤가"용이다 — 최근 3건만 보이고, 전체 표는 웹으로 보낸다
+      // (2026-08-15 지적: 수백 건짜리 표가 설정 안에 있을 자리가 아니다).
+      const RECENT = 3;
       // 최신이 위로 — 사람은 "지금 어떤가"를 먼저 본다.
-      for (const r of rows.slice().reverse()) {
+      for (const r of rows.slice(-RECENT).reverse()) {
         const tr = tbl.createEl("tr");
         const td = (txt: string) => {
           return tr.createEl("td", { text: txt });
@@ -454,6 +487,10 @@ export class NanalStampSettingTab extends PluginSettingTab {
           m.open();
         };
       }
+      const foot = histBox.createDiv({ cls: "setting-item-description" });
+      foot.setText(t.scopeHistRecent(Math.min(3, rows.length), rows.length) + " ");
+      const webLink = foot.createEl("a", { text: t.scopeHistWebBtn });
+      webLink.onclick = () => this.plugin.openExternal("/account#scope-history");
     }).catch(() => {
       histBox.empty();
       histBox.createDiv({ text: t.scopeHistFail, cls: "setting-item-description" });

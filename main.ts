@@ -39,6 +39,8 @@ export interface VerifyResp {
   received_at?: number;
   anchored?: boolean;
   bitcoin?: { block_height?: number };
+  /// 이중 앵커의 TSA 축(RFC 3161 공인 타임스탬프) — 구서버 응답에는 없다.
+  tsa?: { gen_time?: string };
   matches?: Array<{ seq?: number; received_at?: number; bitcoin?: { block_height?: number } }>;
 }
 
@@ -4326,7 +4328,8 @@ export default class NanalStampPlugin extends RecoveryLayer {
         const at = typeof v.received_at === "number" ? fmtDateTime(new Date(v.received_at * 1000)) : "";
         // 세 표면(상태바·증명 모달·봉인 이력)이 같은 상태를 같은 말로 부른다 — 미제출도 침묵하지 않고
         // "앵커 대기"라고 말해야 앵커가 빠진 것처럼 보이지 않는다(2026-07-28).
-        const suffix = v.bitcoin?.block_height ? t.btc(v.bitcoin.block_height) : v.anchored ? t.anchoring : t.anchorWaiting;
+        const suffix = (v.bitcoin?.block_height ? t.btc(v.bitcoin.block_height) : v.anchored ? t.anchoring : t.anchorWaiting)
+          + (v.tsa?.gen_time ? t.tsaMark : "");   // 이중 앵커의 TSA 축 — 있으면 짧게 표시
         // '앵커 중'(anchored지만 ₿ 블록고 미확정)이면 주기 재검증 대상으로 표시.
         this.activeAnchorPending = !v.bitcoin?.block_height && !!v.anchored;
         this.setStatus(t.sealed(seq) + suffix,
@@ -4461,7 +4464,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
   }
 
   // 모달용 접근자
-  async proofFor(file: TFile): Promise<{ status: "sealed" | "changed" | "unsealed" | "pending" | "outscope"; seq?: number; receivedAt?: number; anchored?: boolean; blockHeight?: number; error?: boolean }> {
+  async proofFor(file: TFile): Promise<{ status: "sealed" | "changed" | "unsealed" | "pending" | "outscope"; seq?: number; receivedAt?: number; anchored?: boolean; blockHeight?: number; tsaGenTime?: string; error?: boolean }> {
     if (!this.inSealScope(file.path)) return { status: "outscope" };
     const s = this.stateOf(file.path);
     if (s.dirty) return { status: "pending" };
@@ -4476,6 +4479,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
         receivedAt: v.received_at ?? v.matches?.[0]?.received_at,
         anchored: !!(v.anchored || v.bitcoin?.block_height),
         blockHeight: v.bitcoin?.block_height ?? v.matches?.[0]?.bitcoin?.block_height,
+        tsaGenTime: v.tsa?.gen_time,
       };
     }
     // 서버엔 없음: 예전에 봉인한 적 있으면 "변경됨", 아니면 "미봉인"

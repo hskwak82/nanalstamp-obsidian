@@ -14,6 +14,7 @@ import { ArchiveLayer } from "./archivelayer";
 import {
   PackageData, PackageFile, AnchorInfo,
   buildZip, chainCheckFile, fileSeqFile, blockInfoFile, otsFileName,
+  tsrFileName, tsaInfoFile,
   latestCoveredSeq, packageFolderName,
   partitionVerifiedAnchors, coverageOf,
   snapshotAt, tallyOrigins, ChainEntry, OriginSource, OriginTally,
@@ -315,6 +316,14 @@ export abstract class PackageLayer extends ArchiveLayer {
     // 비트코인 — .ots 는 **바이너리 그대로** 넣는다. 검증기가 33..65 바이트를 직접 읽는다.
     for (const a of anchors) push(`비트코인/${otsFileName(a)}`, b64ToBytes(a.ots_b64));
     push("비트코인/블록정보.txt", blockInfoFile(anchors));
+
+    // 공인 타임스탬프(RFC 3161) — 이중 앵커의 두 번째 축. .tsr(DER) 원본 그대로.
+    // 비트코인 블록 대조 필터를 거치지 않는다 — TSA 검증은 openssl 이 오프라인으로 한다.
+    const tsa = data.tsa_anchors ?? [];
+    if (tsa.length > 0) {
+      for (const t of tsa) push(`공인타임스탬프/${tsrFileName(t)}`, b64ToBytes(t.tsr_b64));
+      push("공인타임스탬프/발급정보.txt", tsaInfoFile(tsa));
+    }
 
     // 한 장짜리 요약 증명서(PDF) — 심사자가 결재·보관용으로 쓴다. 영문인 이유는
     // PDF 엔진의 builtin 폰트가 Latin-1 만 그리기 때문이다(한글 안내는 HTML 이 맡는다).

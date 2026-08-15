@@ -77,6 +77,13 @@ export class ProofModal extends NanalModal {
       if (info.blockHeight) statRow(t.proofAnchorConfirmed(info.blockHeight));
       else if (info.anchored) statRow(t.proofAnchorPending);
       else statRow(t.proofAnchorNone);
+      // 이중 앵커의 TSA 축 — 비트코인과 별개의 독립 증거라 따로 한 줄을 준다.
+      if (info.tsaGenTime) {
+        const at = fmtDateTime(new Date(info.tsaGenTime));
+        statRow(t.proofTsaConfirmed(at));
+      } else {
+        statRow(t.proofTsaNone);
+      }
     } else if (info.status === "changed") {
       body.createEl("p", { text: t.proofChangedBody, cls: "setting-item-description" });
     } else if (info.status === "unsealed") {

@@ -26,7 +26,7 @@ export interface AnchorInfo {
   ots_b64: string;
 }
 
-/// 이중 앵커의 TSA 축 — RFC 3161 공인 타임스탬프. .tsr(DER)는 openssl 로 독립 검증하므로
+/// 이중 앵커의 TSA 축 — RFC 3161 신뢰기관 타임스탬프. .tsr(DER)는 openssl 로 독립 검증하므로
 /// 비트코인 블록 대조 필터(partitionVerifiedAnchors)를 태우지 않는다.
 export interface TsaAnchorInfo {
   head_seq: number;
@@ -342,10 +342,10 @@ export function tsrFileName(t: TsaAnchorInfo): string {
   return `TSA_head${t.head_seq}.tsr`;
 }
 
-/// 공인 타임스탬프(.tsr) 안내표 — 블록정보.txt 와 같은 취지의 스크립트 친화 형식.
+/// 신뢰기관 타임스탬프(.tsr) 안내표 — 블록정보.txt 와 같은 취지의 스크립트 친화 형식.
 export function tsaInfoFile(tsa: TsaAnchorInfo[]): string {
   const head =
-    "# RFC 3161 공인 타임스탬프(TSA) — 비트코인 앵커와 별개의 독립 증거입니다.\n" +
+    "# RFC 3161 신뢰기관 타임스탬프(TSA) — 비트코인 앵커와 별개의 독립 증거입니다.\n" +
     "# 형식: 발급시각|TSA주소|서명대상해시(머클루트, 없으면 head 기록 해시)|파일명\n" +
     "# 검증: openssl ts -verify -digest <서명대상해시> -in <파일명> -CAfile <TSA CA 인증서>\n";
   return head + tsa

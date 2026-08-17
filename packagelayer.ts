@@ -317,12 +317,13 @@ export abstract class PackageLayer extends ArchiveLayer {
     for (const a of anchors) push(`비트코인/${otsFileName(a)}`, b64ToBytes(a.ots_b64));
     push("비트코인/블록정보.txt", blockInfoFile(anchors));
 
-    // 공인 타임스탬프(RFC 3161) — 이중 앵커의 두 번째 축. .tsr(DER) 원본 그대로.
+    // 신뢰기관 타임스탬프(RFC 3161 TSA) — 이중 앵커의 두 번째 축. .tsr(DER) 원본 그대로.
+    // ("공인" 표기 금지 — 공인 TSA 제도는 2020년 전자서명법 개정으로 폐지됐다.)
     // 비트코인 블록 대조 필터를 거치지 않는다 — TSA 검증은 openssl 이 오프라인으로 한다.
     const tsa = data.tsa_anchors ?? [];
     if (tsa.length > 0) {
-      for (const t of tsa) push(`공인타임스탬프/${tsrFileName(t)}`, b64ToBytes(t.tsr_b64));
-      push("공인타임스탬프/발급정보.txt", tsaInfoFile(tsa));
+      for (const t of tsa) push(`신뢰기관타임스탬프/${tsrFileName(t)}`, b64ToBytes(t.tsr_b64));
+      push("신뢰기관타임스탬프/발급정보.txt", tsaInfoFile(tsa));
     }
 
     // 한 장짜리 요약 증명서(PDF) — 심사자가 결재·보관용으로 쓴다. 영문인 이유는

@@ -42,7 +42,7 @@ export interface VerifyResp {
   received_at?: number;
   anchored?: boolean;
   bitcoin?: { block_height?: number };
-  /// 이중 앵커의 TSA 축(RFC 3161 공인 타임스탬프) — 구서버 응답에는 없다.
+  /// 이중 앵커의 TSA 축(RFC 3161 신뢰기관 타임스탬프) — 구서버 응답에는 없다.
   tsa?: { gen_time?: string };
   matches?: Array<{ seq?: number; received_at?: number; bitcoin?: { block_height?: number } }>;
 }

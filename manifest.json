@@ -1,7 +1,7 @@
 {
   "id": "nanalstamp",
   "name": "nanalStamp",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "minAppVersion": "1.13.0",
   "description": "Seals each note with a tamper-proof, content-private timestamp, dual-anchored to Bitcoin and RFC 3161 trusted timestamps — proof of existence, unbroken version history, and a local git backup for your research notes.",
   "author": "nanalLabs",

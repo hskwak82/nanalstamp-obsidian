@@ -115,7 +115,7 @@ export class NanalStampSettingTab extends PluginSettingTab {
   /// 표시/숨김만 바뀌는 곳은 refreshDomState()를 쓸 것(페이지 안에서도 제자리 갱신).
   private safeUpdate() {
     const doc = this.containerEl.ownerDocument;
-    const back = doc.querySelector(".setting-page-back-button") as HTMLElement | null;
+    const back = doc.querySelector<HTMLElement>(".setting-page-back-button");
     if (back) {
       back.click();
       // 닫힘 처리가 이벤트 루프를 타는 경우를 대비해 한 틱 미룬다 — 닫히기 전에

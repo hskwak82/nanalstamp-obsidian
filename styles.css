@@ -74,27 +74,12 @@
 .nanalstamp-settings .nanalstamp-reset-link:hover { color: var(--text-normal); text-decoration: underline; }
 
 /* 고급 설정 — 접힌 <details>: 클릭 유도(포인터·회색·회전 화살표), 열림 시 내부 여백 */
-.nanalstamp-settings details.nanalstamp-advanced { margin-top: 8px; }
-.nanalstamp-settings details.nanalstamp-advanced > summary {
-  cursor: pointer;
-  color: var(--text-muted);
-  font-size: 0.9em;
-  font-weight: 600;
-  padding: 10px 6px;
-  border-radius: 8px;
-  list-style: none;
-  user-select: none;
-}
-.nanalstamp-settings details.nanalstamp-advanced > summary::-webkit-details-marker { display: none; }
-.nanalstamp-settings details.nanalstamp-advanced > summary::before {
-  content: "▸";
-  display: inline-block;
-  margin-right: 8px;
-  transition: transform 120ms ease;
-}
-.nanalstamp-settings details.nanalstamp-advanced[open] > summary::before { transform: rotate(90deg); }
-.nanalstamp-settings details.nanalstamp-advanced > summary:hover { color: var(--text-normal); background: var(--background-modifier-hover); }
-.nanalstamp-settings .nanalstamp-advanced-body { padding: 4px 6px 16px; }
+/* 선언형 render 항목(2026-08 설정 3차)이 카드·배너를 그리는 자유 블록 —
+   Setting 행 기본 구조(구분선·2단 배치)를 걷어내고 내용물이 전폭을 쓴다. */
+.nanalstamp-def-block { border: none; padding: 0; margin: 0; display: block; }
+/* 봉인 범위 상태 안내(고급 하위 페이지) — 종전 인라인 cssText를 클래스로(스토어 심사 대응). */
+.nanalstamp-scope-note { padding: 8px 10px; margin: 4px 0 8px; border-radius: 6px; font-size: 12px; background: var(--background-modifier-hover); color: var(--text-muted); }
+.nanalstamp-scope-note.is-warn { background: var(--background-modifier-error-hover); color: inherit; }
 
 /* 고급 내부 카테고리 헤딩 — 위 구분선·여백으로 섹션 분리(1차 개편 스타일 유지) */
 .nanalstamp-settings .setting-item.setting-item-heading {
@@ -410,11 +395,12 @@
 /* 봉인이 **멈춰 있는** 상태는 사용자가 놓치면 안 된다. 9px 배지 하나로는 눈에 안 들어와서
    (2026-07-29 지적) 리본 아이콘 자체를 경고색으로 두르고 배지도 키운다. 애니메이션은 쓰지
    않는다 — 늘 떠 있는 진입점이라 움직이면 방해가 된다. */
-.nanalstamp-ribbon-warn {
-  /* 테두리로 두른다 — 배경을 꽉 채우면 로고가 묻혀 무엇을 누르는 자리인지 알아보기 어렵다. */
-  box-shadow: 0 0 0 2px var(--text-error) !important;
+.nanalstamp-ribbon-warn.nanalstamp-ribbon-warn.nanalstamp-ribbon-warn {
+  /* 테두리로 두른다 — 배경을 꽉 채우면 로고가 묻혀 무엇을 누르는 자리인지 알아보기 어렵다.
+     클래스 3중 반복 = 특이도 0-3-0 — 코어 .clickable-icon:hover(0-2-0)를 !important 없이 이긴다(스토어 심사 경고 대응). */
+  box-shadow: 0 0 0 2px var(--text-error);
   border-radius: var(--radius-s);
-  background: transparent !important;
+  background: transparent;
 }
 .nanalstamp-task-ribbon-badge.is-warn {
   top: -4px; right: -5px; font-size: 11px; padding: 0 5px;
@@ -554,7 +540,7 @@
 .nanalstamp-col-resize-handle::after { content: ""; position: absolute; top: 20%; right: 2px; width: 2px; height: 60%; border-radius: 1px; background: transparent; }
 .nanalstamp-col-resize-handle:hover::after, .nanalstamp-col-resize-handle.is-dragging::after { background: var(--interactive-accent); }
 /* 드래그 중 전역 커서·선택 억제(어느 요소 위든 col-resize 유지). */
-body.nanalstamp-col-resizing, body.nanalstamp-col-resizing * { cursor: col-resize !important; user-select: none !important; }
+body.nanalstamp-col-resizing.nanalstamp-col-resizing, body.nanalstamp-col-resizing.nanalstamp-col-resizing * { cursor: col-resize; user-select: none; }
 
 /* ── 업무함 4뷰 시각 마감(§Task 12) — 툴바·그룹·컴팩트·보드·카드·팝오버. 색은 전부 Obsidian 테마 변수 ── */
 /* 툴바(완료 숨김 토글 + 정렬/필터 요약 칩) */
@@ -651,12 +637,13 @@ body.nanalstamp-col-resizing, body.nanalstamp-col-resizing * { cursor: col-resiz
    ※ macOS 기본은 네이티브 메뉴라 이 CSS가 닿지 않는다 — buildRibbonMenu가 setUseNativeMenu(false)로
      이 메뉴만 DOM 렌더로 돌린다(전역 설정은 그대로). */
 .menu-item .nanalstamp-menu-header { display: inline-block; color: var(--text-accent); font-size: 0.85em; font-weight: 700; letter-spacing: 0.1em; }
-.menu-item:has(.nanalstamp-menu-header) { opacity: 1; pointer-events: none; cursor: default; min-height: 0; }
-.menu-item:has(.nanalstamp-menu-header) .menu-item-icon { display: none; }
+/* 카테고리 제목 행 — setIsLabel이 붙이는 is-label을 그대로 쓴다(부모 선택 :has 불요, 스토어 심사 대응). */
+.menu.nanalstamp-ribbon-menu .menu-item.is-label { opacity: 1; pointer-events: none; cursor: default; min-height: 0; }
+.menu.nanalstamp-ribbon-menu .menu-item.is-label .menu-item-icon { display: none; }
 /* "처리해야 할 일" 항목(원문 누락·빠진 봉인 발견·반려·봉인 보류) — 건수만 붙여서는 평상시
    항목과 구분이 안 돼 지나친다(2026-08-06 지적). 제목·아이콘을 경고색으로. */
 .menu-item .nanalstamp-menu-warn { color: var(--color-red); font-weight: 600; }
-.menu-item:has(.nanalstamp-menu-warn) .menu-item-icon { color: var(--color-red); }
+.menu-item.is-nanalstamp-warn .menu-item-icon { color: var(--color-red); }
 
 /* 팀 폴더 충돌 처리 팝업(2026-08-06) — 충돌 경로 / 새 이름 입력 / 바꾸기 버튼 한 줄 */
 .nanalstamp-fcf-row { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
@@ -667,11 +654,11 @@ body.nanalstamp-col-resizing, body.nanalstamp-col-resizing * { cursor: col-resiz
 /* 간격 — 항목 21행이라 기본 여백으로는 메뉴가 화면을 넘본다. 촘촘하게 좁히되 카테고리 위에만
    숨 쉴 틈을 남겨 그룹이 뭉치지 않게 한다. */
 .menu.nanalstamp-ribbon-menu .menu-item { padding-top: 2px; padding-bottom: 2px; min-height: 0; }
-.menu.nanalstamp-ribbon-menu .menu-item:has(.nanalstamp-menu-header) { padding-top: 9px; padding-bottom: 1px; }
+.menu.nanalstamp-ribbon-menu .menu-item.is-label { padding-top: 9px; padding-bottom: 1px; }
 /* hover 하이라이트 — 테마 기본이 투명도 7.5%라 어디에 있는지 안 보였다(사용자 지적).
    선택 위치는 메뉴에서 가장 중요한 신호이므로 확실히 보이게 올린다. */
 .menu.nanalstamp-ribbon-menu .menu-item.selected,
-.menu.nanalstamp-ribbon-menu .menu-item:hover:not(:has(.nanalstamp-menu-header)) { background: color-mix(in srgb, var(--text-normal) 18%, transparent); }
+.menu.nanalstamp-ribbon-menu .menu-item:hover:not(.is-label) { background: color-mix(in srgb, var(--text-normal) 18%, transparent); }
 
 /* ── 업무 상세 모달(2026-07-26) — 표에 담을 수 없는 설명·이력·완료 보고·회신을 한곳에서 ── */
 .nanalstamp-tv-substamp { margin-top: 1px; font-size: 0.85em; color: var(--text-muted); }
@@ -831,8 +818,8 @@ body.nanalstamp-col-resizing, body.nanalstamp-col-resizing * { cursor: col-resiz
   color: var(--text-muted);
   line-height: 1.5;
 }
-.nanalstamp-onboard-upsell-warn {
-  color: var(--text-error) !important;
+.nanalstamp-onboard-upsell p.nanalstamp-onboard-upsell-warn {
+  color: var(--text-error);
   font-weight: 600;
 }
 .nanalstamp-onboard-upsell button {
@@ -1100,6 +1087,7 @@ body.nanalstamp-col-resizing, body.nanalstamp-col-resizing * { cursor: col-resiz
 
 /* 설명 아래 덧붙는 문단 */
 .nanalstamp-desc-extra { margin-top: 6px; }
+.nanalstamp-desc-extra.is-off { display: none; }
 
 /* 업무 모달 — 제목·메모 입력은 행 전폭 */
 .nanalstamp-input-full { width: 100%; }

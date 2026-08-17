@@ -203,7 +203,7 @@ export class TaskDeclineModal extends NanalModal {
         ta.inputEl.rows = 4;
       }).settingEl.addClass("nanalstamp-m-stack");
     const dBtns = new Setting(contentEl).addButton((b) =>
-      b.setButtonText(t.taskBtnDecline).setWarning().onClick(() => void this.submit()));
+      b.setButtonText(t.taskBtnDecline).setDestructive().onClick(() => void this.submit()));
     dBtns.settingEl.addClass("nanalstamp-m-actions");
   }
   private async submit(): Promise<void> {
@@ -607,7 +607,7 @@ export class TaskReopenModal extends NanalModal {
         ta.inputEl.rows = 4;
       }).settingEl.addClass("nanalstamp-m-stack");
     const rBtns = new Setting(contentEl).addButton((b) =>
-      b.setButtonText(t.taskReopenBtn).setWarning().onClick(() => void this.submit()));
+      b.setButtonText(t.taskReopenBtn).setDestructive().onClick(() => void this.submit()));
     rBtns.settingEl.addClass("nanalstamp-m-actions");
   }
   private async submit(): Promise<void> {
@@ -892,7 +892,7 @@ export class TaskEditModal extends NanalModal {
         });
         dd.onChange((v) => (this.assignee = v));
       });
-      re.addButton((b) => b.setButtonText(t.taskReassignBtn).setWarning().onClick(() => void this.reassign()));
+      re.addButton((b) => b.setButtonText(t.taskReassignBtn).setDestructive().onClick(() => void this.reassign()));
     }
 
     const actions = new Setting(contentEl).addButton((b) =>

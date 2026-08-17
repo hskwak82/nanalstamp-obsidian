@@ -3,6 +3,7 @@
 // 모달은 modals(단방향). NanalStampPlugin은 생성자 인자 타입일 뿐이라 import type.
 
 import { App, Modal, Notice, PluginSettingTab, Setting, TFolder } from "obsidian";
+import type { SettingDefinition, SettingDefinitionItem } from "obsidian";
 import { t } from "./i18n";
 import { nodeReq, errMsg, defaultArchivePathSafe, parseFolders, basenameOf } from "./pathutil";
 import { TASK_INBOX_VIEW_TYPE } from "./constants";
@@ -16,68 +17,146 @@ import { fmtDateTime } from "./fmtutil";
 import { fmtBytes } from "./storagecore";
 
 export class NanalStampSettingTab extends PluginSettingTab {
-  private advOpen = false; // 고급 <details> 열림 상태 — 토글 변경 등으로 display()가 재실행돼도 유지
   constructor(app: App, private plugin: NanalStampPlugin) {
     super(app, plugin);
-  }
-  private text(parent: HTMLElement, name: string, desc: string, key: keyof AttestSettings) {
-    new Setting(parent)
-      .setName(name)
-      .setDesc(desc)
-      .addText((tx) =>
-        tx.setValue(String(this.plugin.settings[key])).onChange(async (v) => {
-          (this.plugin.settings as unknown as Record<string, unknown>)[key] = v.trim();
-          await this.plugin.saveSettings();
-        })
-      );
+    // 카드·배지 스타일(styles.css)의 루트 클래스. 선언형 렌더에는 우리 display()가 없으므로
+    // 생성 시점에 한 번 붙인다(containerEl은 SettingTab 생성자가 만든다).
+    this.containerEl.addClass("nanalstamp-settings");
   }
 
-
-  // 2026-07 설정 2차: "가입·로그인만 하면 작동" — 미로그인은 시작 카드 하나,
-  // 로그인 후는 계정·연동 카드 2장 + 접힌 고급(<details>)만 보여준다. 기본값이 곧 동작이다.
-  display() {
-    const { containerEl } = this;
-    containerEl.empty();
-    containerEl.addClass("nanalstamp-settings"); // 카드·배지·고급 접기 스타일(styles.css)
-    if (!Platform.isDesktopApp && !this.plugin.settings.mobileEntitled) {
-      const warn = containerEl.createDiv({ cls: "nanalstamp-banner-warn" });
-      warn.setText(t.mobileSealNeedPlan);
-    }
-    // 업데이트 배너 — **있을 때만** 맨 위에. 최신일 때 "최신입니다"를 상시 띄우면 소음이다.
-    // 판정은 캐시로 즉시 그리고, 하루 1회 갱신이 결과를 바꿨을 때만 한 번 다시 그린다.
+  // ── 2026-08 설정 3차: Obsidian 1.13 선언형 설정 —
+  // display() 오버라이드를 버리고 getSettingDefinitions()로 전환했다(스토어 심사 권고).
+  // 화면 구성은 2차 개편 그대로다: 미로그인 = 시작 카드 하나, 로그인 후 = 계정·연동 카드 +
+  // 고급(1.13 표준 하위 페이지). 카드는 render 항목으로 기존 렌더러를 재사용하고,
+  // 고급의 각 행은 개별 정의라 설정 검색에 잡힌다. 재렌더는 this.update()가 담당한다
+  // (정의 목록을 다시 계산해 다시 그린다 — 종전 this.display() 재호출과 같은 역할).
+  getSettingDefinitions(): SettingDefinitionItem[] {
+    // 업데이트 배너 판정 갱신 — 하루 1회 캐시라 몇 번 불려도 싸다. 판정이 실제로
+    // 바뀌었을 때만 다시 그린다(무한 재귀 없음: update()→여기→then은 판정 불변이면 침묵).
     const newer = this.plugin.updateAvailable();
-    if (newer) {
-      const up = containerEl.createDiv({ cls: "nanalstamp-banner-warn" });
-      up.setText(t.updateBanner(newer) + " ");
-      const openBtn = up.createEl("a", { text: t.updateOpenBtn });
-      openBtn.onclick = () => {
-        // Obsidian 의 커뮤니티 플러그인 화면이 곧 업데이트 화면이다 — 우리가 재구현하지 않는다.
-        (this.app as unknown as { setting: { openTabById(id: string): void } })
-          .setting.openTabById("community-plugins");
-      };
-    }
     void this.plugin.checkLatestVersion().then(() => {
-      if (this.plugin.updateAvailable() !== newer) this.display();
+      if (this.plugin.updateAvailable() !== newer && this.containerEl.isConnected && !this.pageOpen()) this.update();
     });
+    const loggedIn = () => !!this.plugin.settings.apiKey && !this.plugin.authFailed;
     // 키 거부(폐기·만료) — 정상 계정 카드를 그대로 두면 회복 경로가 없다(P-02).
     // 로그아웃을 강요하지 않는다: 시작 카드의 로그인이 성공하면 accountLogin→saveSettings가
     // apiKey를 교체하며 authFailed를 스스로 리셋한다(saveSettings의 lastApiKey 감지).
-    if (this.plugin.settings.apiKey && this.plugin.authFailed) {
-      const warn = containerEl.createDiv({ cls: "nanalstamp-banner-warn" });
-      warn.setText(t.authFailedBanner(this.plugin.settings.accountEmail || ""));
-      this.renderStartCard(containerEl, true); // 이메일/비밀번호 + [로그인] — 회복 톤으로 재사용
-      this.renderVersionFooter(containerEl);
-      return;
+    const recovery = () => !!this.plugin.settings.apiKey && this.plugin.authFailed;
+    return [
+      {
+        name: "", searchable: false,
+        visible: () => !Platform.isDesktopApp && !this.plugin.settings.mobileEntitled,
+        render: (st: Setting) => this.block(st, (host) => {
+          host.createDiv({ cls: "nanalstamp-banner-warn", text: t.mobileSealNeedPlan });
+        }),
+      },
+      {
+        // 업데이트 배너 — **있을 때만** 맨 위에. 최신일 때 "최신입니다"를 상시 띄우면 소음이다.
+        name: "", searchable: false,
+        visible: () => !!this.plugin.updateAvailable(),
+        render: (st: Setting) => this.block(st, (host) => {
+          const v = this.plugin.updateAvailable();
+          if (!v) return;
+          const up = host.createDiv({ cls: "nanalstamp-banner-warn" });
+          up.setText(t.updateBanner(v) + " ");
+          const openBtn = up.createEl("a", { text: t.updateOpenBtn });
+          openBtn.onclick = () => {
+            // Obsidian 의 커뮤니티 플러그인 화면이 곧 업데이트 화면이다 — 우리가 재구현하지 않는다.
+            (this.app as unknown as { setting: { openTabById(id: string): void } })
+              .setting.openTabById("community-plugins");
+          };
+        }),
+      },
+      {
+        name: "", searchable: false,
+        visible: recovery,
+        render: (st: Setting) => this.block(st, (host) => {
+          host.createDiv({ cls: "nanalstamp-banner-warn", text: t.authFailedBanner(this.plugin.settings.accountEmail || "") });
+        }),
+      },
+      {
+        name: t.loginName, desc: t.loginDesc, aliases: [t.registerBtn, t.loginBtn],
+        visible: () => !this.plugin.settings.apiKey || this.plugin.authFailed,
+        render: (st: Setting) => this.block(st, (host) => this.renderStartCard(host, recovery())),
+      },
+      {
+        name: t.acctName, desc: t.acctConnected, aliases: [t.pricingCmd, t.manageSubBtn, t.logoutBtn],
+        visible: loggedIn,
+        render: (st: Setting) => this.block(st, (host) => { this.hostAccount = host; this.renderAccountCard(host); }),
+      },
+      {
+        name: t.integrationsHead, desc: t.githubRowName, aliases: [t.githubRowName, t.teamRowName],
+        visible: loggedIn,
+        render: (st: Setting) => this.block(st, (host) => { this.hostIntegrations = host; this.renderIntegrationsCard(host); }),
+      },
+      // (B)-3 고급 — 1.13 표준 하위 페이지. 종전 접힘(<details>)을 대체한다(2026-08-17 승인).
+      // 내부 각 행이 개별 정의라 Obsidian 설정 검색이 항목 단위로 찾는다.
+      { type: "page", name: t.advancedSummary, desc: t.settIntro, visible: loggedIn, items: this.advancedItems() },
+      {
+        name: "", searchable: false,
+        render: (st: Setting) => this.block(st, (host) => this.renderVersionFooter(host)),
+      },
+    ];
+  }
+
+  // 카드 호스트 참조 — 하위 페이지의 토글이 루트 카드 내용(사용량 바·재수신 버튼)을 바꿀 때
+  // update() 대신 카드만 제자리 재렌더한다. update()는 열린 하위 페이지를 빈 껍데기로 만든다
+  // (1.13.7 실측: 루트만 다시 그리고 페이지 내용은 버린다).
+  private hostAccount?: HTMLElement;
+  private hostIntegrations?: HTMLElement;
+
+  /// 열린 선언형 하위 페이지가 있는가 — 페이지가 열리면 .setting-page 컨테이너가 생긴다
+  /// (1.13.7 실측. 모달 헤더의 .modal-setting-back-button은 두 상태 모두 rects 0이라 못 쓴다).
+  private pageOpen(): boolean {
+    return !!this.containerEl.ownerDocument.querySelector(".setting-page");
+  }
+
+  /// 정의 구조가 실제로 바뀌는 재렌더 — 하위 페이지가 열려 있으면 닫고 한다(위 실측 참조).
+  /// 표시/숨김만 바뀌는 곳은 refreshDomState()를 쓸 것(페이지 안에서도 제자리 갱신).
+  private safeUpdate() {
+    const doc = this.containerEl.ownerDocument;
+    const back = doc.querySelector(".setting-page-back-button") as HTMLElement | null;
+    if (back) {
+      back.click();
+      // 닫힘 처리가 이벤트 루프를 타는 경우를 대비해 한 틱 미룬다 — 닫히기 전에
+      // update()하면 페이지가 다시 빈 껍데기가 된다.
+      window.setTimeout(() => { if (this.containerEl.isConnected) this.update(); }, 50);
+    } else {
+      this.update();
     }
-    if (!this.plugin.settings.apiKey) {
-      this.renderStartCard(containerEl); // (A) 미로그인 — 이 카드 외에는 아무것도 렌더하지 않는다(언어 포함)
-      this.renderVersionFooter(containerEl);
-      return;
-    }
-    this.renderAccountCard(containerEl);      // (B)-1 계정
-    this.renderIntegrationsCard(containerEl); // (B)-2 연동(GitHub·팀)
-    this.renderAdvanced(containerEl);         // (B)-3 고급 — 기본 닫힘
-    this.renderVersionFooter(containerEl);    // 맨 아래 버전 줄 — 관례상 푸터
+  }
+
+  private refreshAccountCard() {
+    const h = this.hostAccount;
+    if (h?.isConnected) { h.empty(); this.renderAccountCard(h); }
+  }
+
+  private refreshIntegrationsCard() {
+    const h = this.hostIntegrations;
+    if (h?.isConnected) { h.empty(); this.renderIntegrationsCard(h); }
+  }
+
+  /// render 항목이 카드·배너 같은 자유 블록을 그릴 때 — Setting 행의 기본 구조(이름/설명/컨트롤 칸,
+  /// 행 구분선)를 걷어내고 빈 블록으로 만든다. 정의의 name은 검색용으로만 남는다.
+  private block(st: Setting, build: (host: HTMLElement) => void) {
+    const host = st.settingEl;
+    host.empty();
+    host.className = "nanalstamp-def-block";
+    build(host);
+  }
+
+  private textDef(name: string, desc: string, key: keyof AttestSettings, visible?: () => boolean): SettingDefinition {
+    return {
+      name, desc, ...(visible ? { visible } : {}),
+      render: (st: Setting) => {
+        st.addText((tx) =>
+          tx.setValue(String(this.plugin.settings[key])).onChange(async (v) => {
+            (this.plugin.settings as unknown as Record<string, unknown>)[key] = v.trim();
+            await this.plugin.saveSettings();
+          })
+        );
+      },
+    };
   }
 
   /// 하단 버전 줄 — `nanalStamp v1.5.5 · 최신`. "최신"은 실제로 확인된 날에만 붙인다
@@ -117,7 +196,7 @@ export class NanalStampSettingTab extends PluginSettingTab {
         try {
           const tier = await this.plugin.accountLogin(loginEmail, loginPw);
           new Notice(t.loginOk(tier));
-          this.display();
+          this.safeUpdate();
           // 로그인 직후 1회 — 기존에 이미 선택을 완료한 계정(다른 기기 등)이면 scopeChosen이 서버가 아닌
           // 로컬 값이라 재로그인 시에도 다시 뜰 수 있다(허용 — 과도한 알림보단 1회 더 보는 편이 안전).
           if (!this.plugin.settings.scopeChosen && !this.plugin.scopeModalOpen) new OnboardingScopeModal(this.app, this.plugin).open();
@@ -179,7 +258,7 @@ export class NanalStampSettingTab extends PluginSettingTab {
       if (this.plugin.usageStale()) {
         // 재렌더는 setTimeout+isConnected 가드 — 렌더 중 microtask 재진입 프리즈 방지(entitlement 갱신과 동일 패턴)
         void this.plugin.fetchStorageUsage().then(() => {
-          window.setTimeout(() => { if (this.containerEl.isConnected) this.display(); }, 0);
+          window.setTimeout(() => { this.refreshAccountCard(); }, 0);
         });
       }
     }
@@ -190,7 +269,7 @@ export class NanalStampSettingTab extends PluginSettingTab {
       .addButton((b) => b.setButtonText(t.pricingCmd).setCta().onClick(() => this.plugin.openExternal("/pricing")))
       .addButton((b) => b.setButtonText(t.manageSubBtn).onClick(() => this.plugin.openExternal("/account")))
       // 로그아웃 = 저장된 API 키 삭제(파괴적) — 오클릭 방지 확인 창 필수(1차 개편 결정 유지).
-      .addButton((b) => b.setButtonText(t.logoutBtn).setWarning().onClick(() => {
+      .addButton((b) => b.setButtonText(t.logoutBtn).setDestructive().onClick(() => {
         // 네이티브 confirm() 을 쓰면 Electron 대화상자가 렌더러를 통째로 세운다(2026-07-31 실측).
         new ConfirmModal(this.app, {
           title: t.logoutBtn, body: t.logoutConfirm,
@@ -199,7 +278,7 @@ export class NanalStampSettingTab extends PluginSettingTab {
           this.plugin.settings.apiKey = "";
           this.plugin.settings.accountEmail = "";
           await this.plugin.saveSettings();
-          this.display();
+          this.safeUpdate();
         })()).open();
       }));
 
@@ -232,7 +311,7 @@ export class NanalStampSettingTab extends PluginSettingTab {
         .setDesc(t.githubConnectDesc)
         .addButton((b) =>
           b.setButtonText(t.githubConnectBtn).setCta().onClick(() => {
-            new GitHubConnectModal(this.app, this.plugin, () => this.display()).open();
+            new GitHubConnectModal(this.app, this.plugin, () => this.safeUpdate()).open();
           })
         );
     } else {
@@ -240,11 +319,11 @@ export class NanalStampSettingTab extends PluginSettingTab {
         .setName(t.githubRowName)
         .setDesc(t.githubConnectedDesc(s.githubUser || "?", s.githubRepo || "?"))
         .addButton((b) =>
-          b.setButtonText(t.githubDisconnectBtn).setWarning().onClick(async () => {
+          b.setButtonText(t.githubDisconnectBtn).setDestructive().onClick(async () => {
             s.githubPat = "";
             s.githubUser = "";
             await this.plugin.saveSettings();
-            this.display();
+            this.safeUpdate();
           })
         );
     }
@@ -273,10 +352,10 @@ export class NanalStampSettingTab extends PluginSettingTab {
         new Setting(card)
           .setName(t.teamKeyName)
           .setDesc(t.teamKeySet(s.teamAccountEmail || "—"))
-          .addButton((b) => b.setButtonText(t.teamKeyUnlink).setWarning().onClick(async () => {
+          .addButton((b) => b.setButtonText(t.teamKeyUnlink).setDestructive().onClick(async () => {
             await this.plugin.teamAccountLogout();
             new Notice(t.teamKeyUnlinked);
-            this.display();
+            this.safeUpdate();
           }));
       }
       // 거부된 상태에서는 **다시 연결하는 칸도 함께** 낸다. 연결 해제 버튼만 있으면 위 안내가
@@ -297,7 +376,7 @@ export class NanalStampSettingTab extends PluginSettingTab {
             try {
               await this.plugin.teamAccountLogin(te, tp);
               new Notice(t.teamKeyLinked(te.trim()));
-              this.display();
+              this.safeUpdate();
             } catch (e) { new Notice(t.loginFail(errMsg(e))); }
           }));
       }
@@ -314,134 +393,430 @@ export class NanalStampSettingTab extends PluginSettingTab {
             else new Notice(t.teamProfileFail);
             if (c === "enabled") new Notice(t.teamCustodyOn);
             else if (c === "disabled" || c === "not-member") new Notice(t.teamCustodyOff);
-            this.display(); // 마지막 수신 시각·custody 상태 갱신
+            this.refreshIntegrationsCard(); // 마지막 수신 시각·custody 상태 갱신
           })
         );
       }
     }
   }
 
-  // (B)-3 고급 설정 — 기본 닫힘 <details>. 기본값이 곧 권장값이라 대부분 열 일이 없다.
-  private renderAdvanced(containerEl: HTMLElement) {
-    const s = this.plugin.settings;
-    const det = containerEl.createEl("details", { cls: "nanalstamp-advanced" });
-    det.open = this.advOpen;
-    det.addEventListener("toggle", () => { this.advOpen = det.open; });
-    det.createEl("summary", { text: t.advancedSummary });
-    const body = det.createDiv({ cls: "nanalstamp-advanced-body" });
-    body.createEl("p", { text: t.settIntro, cls: "setting-item-description" });
-
-    // ── 봉인 범위(기본: 전체 볼트) + 첨부 봉인(기본 켜짐) ─────────────────
-    new Setting(body).setName(t.sealScopeHead).setHeading();
-    // 팀 최상위 루트(2026-07-25): 루트가 있으면 로컬 필터는 미사용 — 명시 안내. 루트 미설정인데
-    // 프로파일 적용은 켜져 있으면 경고 톤으로 안내(관리자가 아직 팀 이름을 저장하지 않은 상태).
-    const teamRoot = this.plugin.teamRoot();
-    // 루트 미설정 + 포함 폴더 비어 있음 = inScope가 전부 true(1985~) → 개인 노트까지 봉인 범위다.
-    // "로컬 설정이 적용됩니다"는 그 결과를 축소해 말하는 것이어서, 실제 상태를 그대로 알린다.
-    const localWholeVault = parseFolders(s.includeFolders).length === 0;
-    // 팀 문구는 **팀 소속일 때만**. teamProfileEnabled는 "팀 정책을 자동 적용할지"라 기본값이 true여서,
-    // 팀에 속한 적도 없는 개인 사용자에게 "팀 관리자가 …"라는 붉은 경고가 떴다(2026-07-28 발견).
-    // 팀 프로파일을 한 번이라도 받은 적이 있어야(=멤버) 팀을 말한다. 개인 사용자의 범위 미설정은
-    // 리본 배지·상태바·시작 범위 모달이 이미 경고하므로 여기서 또 말하지 않는다.
-    const inTeam = s.teamProfileUpdatedAt > 0;
-    const scopeNote = teamRoot ? t.scopeTeamRoot(teamRoot)
-      : (inTeam && s.teamProfileEnabled ? (localWholeVault ? t.scopeTeamRootMissingAll : t.scopeTeamRootMissing) : "");
-    if (scopeNote) {
-      const note = body.createDiv();
-      // 경고 톤(붉은 배경)에서는 색을 상속시킨다 — muted를 얹으면 테마에 따라 대비가 떨어진다
-      // (main.ts:5557 모바일 미구독 경고와 같은 방식).
-      const bg = teamRoot ? "var(--background-modifier-hover)" : "var(--background-modifier-error-hover)";
-      const fg = teamRoot ? "color:var(--text-muted)" : "";
-      note.style.cssText = `padding:8px 10px;margin:4px 0 8px;border-radius:6px;font-size:12px;background:${bg};${fg}`;
-      note.setText(scopeNote);
-    }
-    // 폴더는 하나의 트리에서 고른다(2026-07-27). 예전에는 "포함 폴더"·"제외 폴더" 두 목록을
-    // 사용자가 직접 관리했는데, 제외는 **"고른 폴더 안에서 일부를 뺀다"를 저장하는 방법**일 뿐
-    // 사용자가 알아야 할 개념이 아니다. 트리에서 체크·해제하면 두 목록이 자동으로 만들어진다.
-    const scopeSetting = new Setting(body).setName(t.sealFoldersName);
-    // 저장된 항목 **수**가 아니라 실제 효과를 쓴다. "폴더 1곳 봉인"은 그 아래 전부가 봉인된다는
-    // 사실을 숨긴다(2026-07-27 지적). 고른 폴더 이름을 그대로 보여주고 "아래 전부"라고 말한다.
-    const scopeDesc = () => {
-      const inc = parseFolders(this.plugin.settings.includeFolders);
-      const exc = parseFolders(this.plugin.settings.excludeFolders);
-      const root = this.plugin.teamRoot();
-      const names = (root ? [root] : []).concat(inc);
-      const base = names.length === 0 ? t.scopeAllVault : t.scopeUnderFolders(names.join(", "));
-      return exc.length > 0 ? `${base} · ${t.scopeMinus(exc.length)}` : base;
-    };
-    scopeSetting.setDesc(`${scopeDesc()} · ${t.sealFoldersDesc}`);
-    scopeSetting.addButton((b) =>
-      b.setButtonText(t.folderPick).setCta().onClick(() => {
-        new FolderTreeModal(
-          this.app,
-          parseFolders(this.plugin.settings.includeFolders),
-          parseFolders(this.plugin.settings.excludeFolders),
-          this.plugin.teamRoot(),
-          async (inc, exc) => {
-            this.plugin.settings.includeFolders = inc.join("\n");
-            this.plugin.settings.excludeFolders = exc.join("\n");
-            await this.plugin.saveSettings();
-            scopeSetting.setDesc(`${scopeDesc()} · ${t.sealFoldersDesc}`);
-            new Notice(t.folderTreeSaved(inc.length));
-            this.plugin.updateTaskRibbon();
-            void this.plugin.updateActiveStatus();
+  // (B)-3 고급 하위 페이지의 정의 목록 — 종전 renderAdvanced의 각 행을 개별 정의로 옮겼다.
+  // 조건 노출(if)은 visible 술어로, 재렌더(this.display())는 this.update()로 옮긴 것 외에
+  // 각 행의 내용·동작은 그대로다.
+  private advancedItems(): SettingDefinitionItem[] {
+    const p = this.plugin;
+    const sv = () => p.settings;
+    return [
+      // ── 봉인 범위(기본: 전체 볼트) + 첨부 봉인(기본 켜짐) ─────────────────
+      { type: "group", heading: t.sealScopeHead, items: [
+        {
+          name: "", searchable: false,
+          // 팀 최상위 루트(2026-07-25): 루트가 있으면 로컬 필터는 미사용 — 명시 안내. 루트 미설정인데
+          // 프로파일 적용은 켜져 있으면 경고 톤으로 안내(관리자가 아직 팀 이름을 저장하지 않은 상태).
+          // 루트 미설정 + 포함 폴더 비어 있음 = inScope가 전부 true(1985~) → 개인 노트까지 봉인 범위다.
+          // "로컬 설정이 적용됩니다"는 그 결과를 축소해 말하는 것이어서, 실제 상태를 그대로 알린다.
+          visible: () => !!this.scopeNote(),
+          render: (st: Setting) => this.block(st, (host) => {
+            const teamRoot = p.teamRoot();
+            const note = host.createDiv({ cls: "nanalstamp-scope-note" + (teamRoot ? "" : " is-warn") });
+            note.setText(this.scopeNote() || "");
+          }),
+        },
+        {
+          // 폴더는 하나의 트리에서 고른다(2026-07-27). 예전에는 "포함 폴더"·"제외 폴더" 두 목록을
+          // 사용자가 직접 관리했는데, 제외는 **"고른 폴더 안에서 일부를 뺀다"를 저장하는 방법**일 뿐
+          // 사용자가 알아야 할 개념이 아니다. 트리에서 체크·해제하면 두 목록이 자동으로 만들어진다.
+          name: t.sealFoldersName, desc: t.sealFoldersDesc,
+          render: (st: Setting) => {
+            // 저장된 항목 **수**가 아니라 실제 효과를 쓴다. "폴더 1곳 봉인"은 그 아래 전부가 봉인된다는
+            // 사실을 숨긴다(2026-07-27 지적). 고른 폴더 이름을 그대로 보여주고 "아래 전부"라고 말한다.
+            const scopeDesc = () => {
+              const inc = parseFolders(sv().includeFolders);
+              const exc = parseFolders(sv().excludeFolders);
+              const root = p.teamRoot();
+              const names = (root ? [root] : []).concat(inc);
+              const base = names.length === 0 ? t.scopeAllVault : t.scopeUnderFolders(names.join(", "));
+              return exc.length > 0 ? `${base} · ${t.scopeMinus(exc.length)}` : base;
+            };
+            st.setDesc(`${scopeDesc()} · ${t.sealFoldersDesc}`);
+            st.addButton((b) =>
+              b.setButtonText(t.folderPick).setCta().onClick(() => {
+                new FolderTreeModal(
+                  this.app,
+                  parseFolders(sv().includeFolders),
+                  parseFolders(sv().excludeFolders),
+                  p.teamRoot(),
+                  async (inc, exc) => {
+                    sv().includeFolders = inc.join("\n");
+                    sv().excludeFolders = exc.join("\n");
+                    await p.saveSettings();
+                    st.setDesc(`${scopeDesc()} · ${t.sealFoldersDesc}`);
+                    new Notice(t.folderTreeSaved(inc.length));
+                    p.updateTaskRibbon();
+                    void p.updateActiveStatus();
+                  },
+                  sv().sealWholeVault,
+                ).open();
+              })
+            );
           },
-          this.plugin.settings.sealWholeVault,
-        ).open();
-      })
-    );
-    new Setting(body)
-      .setName(t.attachName)
-      .setDesc(t.attachDesc)
-      .addToggle((tg) =>
-        tg.setValue(s.sealAttachments).onChange(async (v) => {
-          s.sealAttachments = v;
-          await this.plugin.saveSettings();
-          this.display(); // 하위 경고(크기 초과 스킵) 표시/숨김 갱신
-        })
-      );
-    if (s.sealAttachments) {
-      // 업로드 한도(팀 정책 또는 5GB 하드캡) 초과로 클라우드 보관에서 제외된 첨부는 경고로 노출(침묵 누락 방지).
-      if (s.attachSkipped.length > 0) {
-        new Setting(body)
-          .setName(t.attachSkippedWarn(s.attachSkipped.length, this.plugin.uploadLimitMB(), this.plugin.uploadSkipByTeam()))
-          .setDesc(s.attachSkipped.join(", "))
-          .setClass("mod-warning");
-      }
-    }
+        },
+        {
+          name: t.attachName, desc: t.attachDesc,
+          render: (st: Setting) => {
+            st.addToggle((tg) =>
+              tg.setValue(sv().sealAttachments).onChange(async (v) => {
+                sv().sealAttachments = v;
+                await p.saveSettings();
+                this.refreshDomState(); // 하위 경고(크기 초과 스킵) 표시/숨김 — 제자리 갱신
+              })
+            );
+          },
+        },
+        {
+          // 업로드 한도(팀 정책 또는 5GB 하드캡) 초과로 클라우드 보관에서 제외된 첨부는 경고로 노출(침묵 누락 방지).
+          name: "", searchable: false,
+          visible: () => sv().sealAttachments && sv().attachSkipped.length > 0,
+          render: (st: Setting) => {
+            st.setName(t.attachSkippedWarn(sv().attachSkipped.length, p.uploadLimitMB(), p.uploadSkipByTeam()));
+            st.setDesc(sv().attachSkipped.join(", "));
+            st.setClass("mod-warning");
+          },
+        },
+        {
+          // 봉인하지 못한 노트 — **조용한 실패를 막는 자리.** 첨부가 상한을 넘거나 보관 용량이
+          // 차면 봉인을 하지 않는데, 알림 한 번만으로 끝내면 사용자는 봉인된 줄 안다.
+          // 원인이 풀리면 스스로 봉인되고 이 목록에서 사라진다.
+          name: "", searchable: false,
+          visible: () => Object.keys(sv().sealHolds || {}).length > 0,
+          render: (st: Setting) => this.block(st, (host) => {
+            const holds = Object.entries(sv().sealHolds || {});
+            new Setting(host).setName(t.holdsTitle(holds.length)).setHeading();
+            const box = host.createDiv({ cls: "nanalstamp-pkg-preview" });
+            box.createDiv({ text: t.holdsDesc, cls: "setting-item-description" });
+            for (const [notePath, h] of holds) {
+              const row = box.createDiv({ cls: "setting-item-description" });
+              row.setText(t.holdDetailLine(
+                notePath, h.kind, basenameOf(h.path), Math.ceil(h.size / (1024 * 1024)), h.limitMB));
+            }
+          }),
+        },
+        {
+          // 지금 적용 중인 상한을 늘 보이게 — 막힌 뒤에야 알게 되면 늦다.
+          name: t.attachLimitName,
+          render: (st: Setting) => {
+            st.setDesc(t.attachLimitDesc(sv().attachmentMaxMb, sv().teamAttachmentMaxMB));
+          },
+        },
+      ]},
 
-    // 봉인하지 못한 노트 — **조용한 실패를 막는 자리.** 첨부가 상한을 넘거나 보관 용량이
-    // 차면 봉인을 하지 않는데, 알림 한 번만으로 끝내면 사용자는 봉인된 줄 안다.
-    // 원인이 풀리면 스스로 봉인되고 이 목록에서 사라진다.
-    {
-      const holds = Object.entries(s.sealHolds || {});
-      if (holds.length > 0) {
-        new Setting(body).setName(t.holdsTitle(holds.length)).setHeading();
-        const box = body.createDiv({ cls: "nanalstamp-pkg-preview" });
-        box.createDiv({ text: t.holdsDesc, cls: "setting-item-description" });
-        for (const [notePath, h] of holds) {
-          const row = box.createDiv({ cls: "setting-item-description" });
-          row.setText(t.holdDetailLine(
-            notePath, h.kind, basenameOf(h.path), Math.ceil(h.size / (1024 * 1024)), h.limitMB));
-        }
-      }
-      // 지금 적용 중인 상한을 늘 보이게 — 막힌 뒤에야 알게 되면 늦다.
-      const lim = this.plugin.settings.attachmentMaxMb;
-      new Setting(body)
-        .setName(t.attachLimitName)
-        .setDesc(t.attachLimitDesc(lim, this.plugin.settings.teamAttachmentMaxMB));
-    }
+      // ── 봉인 범위 이력 ────────────────────────────────────────────────────
+      //
+      // 왜 화면에 있어야 하나: 범위 스냅샷을 사슬에 봉인해 두어도 **볼 수 없으면 없는 것과 같다.**
+      // 감사에서 "왜 이 노트는 봉인이 안 됐냐"를 물으면 그 자리에서 꺼내 보여줄 수 있어야 한다.
+      // 문서는 이 기기의 DEK 로만 열린다 — 서버는 암호문만 갖고 있다.
+      { type: "group", heading: t.scopeHistHead, items: [
+        {
+          name: "", searchable: false,
+          render: (st: Setting) => this.block(st, (host) => this.renderScopeHistory(host)),
+        },
+      ]},
 
-    // ── 업무 요청함(§7b) — 사용 토글 + 시스템 알림(데스크톱 전용) ──────────
-    // ── 봉인 범위 이력 ────────────────────────────────────────────────────
-    //
-    // 왜 화면에 있어야 하나: 범위 스냅샷을 사슬에 봉인해 두어도 **볼 수 없으면 없는 것과 같다.**
-    // 감사에서 "왜 이 노트는 봉인이 안 됐냐"를 물으면 그 자리에서 꺼내 보여줄 수 있어야 한다.
-    // 문서는 이 기기의 DEK 로만 열린다 — 서버는 암호문만 갖고 있다.
-    new Setting(body).setName(t.scopeHistHead).setHeading();
-    const histBox = body.createDiv();
+      // ── 업무 요청함(§7b) — 사용 토글 + 시스템 알림(데스크톱 전용) ──────────
+      { type: "group", heading: t.taskHead, items: [
+        {
+          name: t.taskInboxEnableName, desc: t.taskInboxEnableDesc,
+          render: (st: Setting) => {
+            st.addToggle((tg) =>
+              tg.setValue(sv().taskInboxEnabled).onChange(async (v) => {
+                sv().taskInboxEnabled = v;
+                await p.saveSettings();
+                p.updateTaskRibbon(); // 리본 표시/숨김 즉시 반영
+                if (v) {
+                  void p.pollTasks(true); // 켜는 즉시 1회 동기화(배지 복원)
+                  p.startTaskSse();       // SSE 준실시간 구독 재개(데스크톱)
+                } else {
+                  p.stopTaskSse();        // OFF면 SSE도 중단(§7 — 폴링과 동일 원칙)
+                  this.app.workspace.detachLeavesOfType(TASK_INBOX_VIEW_TYPE); // 끄면 열린 패널도 정리
+                }
+                this.refreshDomState(); // 하위 시스템 알림 토글 표시/숨김 — 제자리 갱신
+              })
+            );
+          },
+        },
+        {
+          // 시스템 알림은 데스크톱 전용(§7b) — 모바일은 배지·패널만이라 토글 자체를 숨긴다.
+          name: t.taskSysNotifyName, desc: t.taskSysNotifyDesc,
+          visible: () => sv().taskInboxEnabled && Platform.isDesktopApp,
+          render: (st: Setting) => {
+            st.addToggle((tg) =>
+              tg.setValue(sv().taskSystemNotify).onChange(async (v) => {
+                sv().taskSystemNotify = v;
+                await p.saveSettings();
+              })
+            );
+          },
+        },
+        {
+          // OS 알림은 자동 설정이 불가(macOS 보안 정책) — 자가진단 버튼으로 권한·스타일 문제를 즉석 확인.
+          name: t.taskSysNotifyTest, desc: t.taskSysNotifyTestDesc,
+          visible: () => sv().taskInboxEnabled && Platform.isDesktopApp,
+          render: (st: Setting) => {
+            st.addButton((b) =>
+              b.setButtonText(t.taskSysNotifyTest).onClick(() => {
+                try { new Notification("nanalStamp", { body: t.taskSysNotifyTestSent }); } catch { /* 무시 */ }
+                new Notice(t.taskSysNotifyTestSent);
+              })
+            );
+          },
+        },
+      ]},
+
+      // ── 보관·백업: 오프사이트 스토리지(B·C1) + 로컬 git 아카이브(P1.5, 기본 켜짐) ──
+      { type: "group", heading: t.storageHead, items: [
+        {
+          // 비-Pro: 잠금 안내만(결제 CTA는 계정 카드에 이미 있다)
+          name: t.githubLocked, desc: t.storageProNote,
+          visible: () => !p.isPro(),
+        },
+        {
+          // C2: 팀 custody 스토리지가 nanal이면 멤버의 개인 선택과 무관하게 강제 활성 — 토글 잠금 + 안내로 대체.
+          name: t.storageBackendName,
+          visible: () => p.isPro(),
+          render: (st: Setting) => {
+            const teamNanal = sv().teamStorage === "nanal";
+            st.setDesc(teamNanal ? t.teamStorageForced : t.storageBackendDesc);
+            // 켜짐 상세는 같은 항목의 설명 두 번째 문단으로 — 별도 Setting 블록(위쪽 공백) 금지(2026-07-22 사용자 지적).
+            // 항상 만들어 두고 표시/숨김만 바꾼다 — 토글 시 행을 다시 그리지 않는다.
+            const extra = st.descEl.createDiv({ cls: "nanalstamp-desc-extra" });
+            extra.setText(t.storageNanalDesc);
+            const syncExtra = () =>
+              extra.toggleClass("is-off", !(sv().storageBackend === "nanal" || sv().teamStorage === "nanal"));
+            syncExtra();
+            st.addToggle((tg) => {
+              // off|nanal 이지선다라 드롭다운일 이유가 없다 — on/off 토글로.
+              tg.setValue(teamNanal || sv().storageBackend === "nanal").onChange(async (v) => {
+                sv().storageBackend = v ? "nanal" : "off";
+                await p.saveSettings();
+                syncExtra();
+                this.refreshAccountCard(); // 계정 카드 사용량 바 표시/숨김
+              });
+              tg.setDisabled(teamNanal);
+            });
+          },
+        },
+        // P1.5: 로컬 git 아카이브(전 티어, 데스크탑만) — 렌더는 전부 동기(프리즈 방지). 폴더선택/이관/git은 버튼 onClick에서만.
+        {
+          name: t.archiveName, desc: t.archiveMobile,
+          visible: () => !Platform.isDesktopApp,
+        },
+        {
+          // 토글 없음 — 끌 수 있는 기능이 아니다(archiveEnabled 주석 참조). 위치만 고른다.
+          name: t.archiveName, desc: t.archiveAlways,
+          visible: () => Platform.isDesktopApp,
+        },
+        {
+          // 경로칸(기본값 채워 표시) + "폴더 선택" 버튼. 텍스트 입력은 draft에만 담고
+          // 실제 적용(이관 포함)은 버튼 onClick에서 applyArchivePath로만 한다.
+          name: t.archivePathName, desc: t.archivePathDesc,
+          visible: () => Platform.isDesktopApp,
+          render: (st: Setting) => {
+            let draftPath = sv().archivePath;
+            let pathInput: HTMLInputElement | null = null;
+            st.addText((tx) => {
+              pathInput = tx.inputEl;
+              tx.setValue(sv().archivePath).setPlaceholder(defaultArchivePathSafe(this.app.vault.getName()));
+              tx.onChange((v) => (draftPath = v));
+            });
+            st.addButton((b) =>
+              b.setButtonText(t.archivePickBtn).onClick(async () => {
+                // 네이티브 폴더 다이얼로그 best-effort → 실패/없으면 경로칸 직접입력 폴백.
+                let chosen = "";
+                try {
+                  const remote = nodeReq("@electron/remote");
+                  const r = await remote?.dialog?.showOpenDialog({ properties: ["openDirectory", "createDirectory"] });
+                  if (r && !r.canceled && r.filePaths?.[0]) chosen = r.filePaths[0];
+                } catch { /* 폴백: 아래 draftPath 사용 */ }
+                const target = chosen || draftPath;
+                const res = await p.applyArchivePath(target);
+                if (res.status === "migrated") new Notice(t.archiveMigrated(res.a || "", res.b || ""));
+                else if (res.status === "exists") new Notice(t.archiveExists);
+                else if (res.status === "set") new Notice(t.archiveSet(res.b || ""));
+                else if (res.status === "invault") new Notice(t.archiveInVault);
+                else if (res.status === "error") new Notice(t.archiveNotWritable(res.b || target));
+                draftPath = sv().archivePath;
+                if (pathInput) pathInput.value = sv().archivePath; // 경로칸 제자리 갱신
+              })
+            );
+          },
+        },
+      ]},
+
+      // ── P1: 증명 원장(로컬, 전 티어, 기본 켜짐) + 백필 + 증명서 크레딧 ────
+      { type: "group", heading: t.ledgerHead, items: [
+        // 토글 없음 — 증명 저장도 끌 수 있는 기능이 아니다(로컬 아카이브와 같은 이유). 폴더만 고른다.
+        { name: t.ledgerName, desc: t.ledgerDesc },
+        this.textDef(t.ledgerFolderName, t.ledgerFolderDesc, "ledgerFolder"),
+        {
+          name: t.backfillName, desc: t.backfillDesc,
+          render: (st: Setting) => {
+            st.addToggle((tg) =>
+              tg.setValue(sv().autoBackfill).onChange(async (v) => {
+                sv().autoBackfill = v;
+                await p.saveSettings();
+                if (v) p.startBackfill(); // 재활성화 = 1회성 배수 다시 시작(소진되면 스스로 종료)
+              })
+            );
+          },
+        },
+        {
+          // 원문 소급 보관 — 스토리지가 켜져 있을 때만 의미가 있다(시작 범위 모달의 섹션 B와 같은 설정).
+          name: t.nanalBackfillName, desc: t.nanalBackfillDesc,
+          visible: () => p.nanalActive(),
+          render: (st: Setting) => {
+            st.addToggle((tg) =>
+              tg.setValue(sv().nanalBackfill).onChange(async (v) => {
+                sv().nanalBackfill = v;
+                if (!v) sv().nanalSince = Date.now(); // 끄는 순간 기준시각 기록 — 이후 ledgerSweep이 이 시각 이후 노트만 소급 대상으로
+                await p.saveSettings(); // 켜면 값 유지만으로 소급 재개(다음 ledgerSweep이 다시 전부 대상으로 봄)
+              })
+            );
+          },
+        },
+        {
+          // 제출 패키지 크레딧 구매 — zip 한 번 만들 때 1건씩 쓰는 단건 크레딧(구독과 별개로 유지).
+          // 종전 이름은 '증명서 크레딧'이었다 — 건당 증명서를 접고 제출 패키지가 그것을 흡수하면서
+          // 이 크레딧이 사는 대상도 바뀌었다(2026-08-05).
+          name: t.buyCreditCmd, desc: t.buyCreditDesc,
+          render: (st: Setting) => {
+            st.addButton((b) => b.setButtonText(t.buyCreditCmd).onClick(() => p.startCheckout("cert_single")));
+          },
+        },
+      ]},
+
+      // ── C1 고급: GitHub 내보내기 세부(토글·수동 repo/PAT) — 연결/해제 자체는 연동 카드에 ──
+      { type: "group", heading: t.storageAdvHead, visible: () => p.isPro(), items: [
+        {
+          // 4.3: 팀 custody 활성이면 개인 GitHub 설정은 쓰이지 않음을 안내.
+          name: "", desc: t.teamCustodyPersonalUnused, searchable: false,
+          visible: () => !!sv().teamCustody,
+        },
+        {
+          name: t.githubExportName, desc: t.githubExportDesc,
+          render: (st: Setting) => {
+            st.addToggle((tg) =>
+              tg.setValue(sv().githubExport).onChange(async (v) => {
+                sv().githubExport = v;
+                await p.saveSettings();
+                this.refreshDomState(); // 하위 repo/PAT 행 표시/숨김 — 제자리 갱신
+              })
+            );
+          },
+        },
+        // 고급(수동 PAT) — 파워 유저용 repo칸 + PAT칸(보조)
+        {
+          name: t.githubAdvancedName, desc: t.githubAdvancedDesc,
+          visible: () => sv().githubExport,
+        },
+        this.textDef(t.githubRepoName, t.githubRepoDesc, "githubRepo", () => sv().githubExport),
+        {
+          name: t.githubPatName, desc: t.githubPatDesc,
+          visible: () => sv().githubExport,
+          render: (st: Setting) => {
+            st.addText((tx) => {
+              tx.setValue(sv().githubPat).onChange(async (v) => {
+                sv().githubPat = v.trim();
+                await p.saveSettings();
+              });
+              (tx.inputEl).type = "password";
+            });
+          },
+        },
+      ]},
+
+      // ── 팀 프로파일 자동 적용(기본 켜짐) — 상태·재수신은 연동 카드에 ──────
+      { type: "group", heading: t.teamProfileHead, items: [
+        {
+          name: t.teamProfileEnableName,
+          render: (st: Setting) => {
+            // 팀 소속이면 **잠근다**(2026-08-05). 팀 정책 자동 적용을 끄면 teamRoot()가 null이 되어
+            // 팀 폴더 노트가 개인 사슬로 떨어진다 — 조직이 강제해야 할 것을 팀원이 끄는 경로다.
+            // 판정은 teamApiKey 단독이 아니라 teamRole과 합쳐 본다 — teamApiKey는 팀 계정을 따로
+            // 쓰는(회사 메일 ≠ 개인 메일) 소수만 채워지고(main.ts teamAccountLogin), 대다수 팀원은
+            // 같은 계정을 그대로 쓰므로 teamApiKey가 끝까지 비어 있다(main.ts keyFor 주석 참조).
+            // teamRole은 fetchTeamProfile이 매 수신마다 갱신하고 팀을 떠나면 404 분기에서 정리되므로
+            // 대다수 경로를 커버하고 탈퇴 후 자동으로 풀린다. teamApiKey는 "팀 계정 로그인 직후,
+            // 첫 수신이 아직 안 온" 좁은 창(그 사이 설정 탭을 열어 끄는 경우)만 추가로 덮는다.
+            const s = sv();
+            const teamLocked = !!s.teamApiKey || s.teamRole !== "";
+            if (teamLocked && !s.teamProfileEnabled) {
+              // 이미 꺼 둔 사람은 되돌린다(1회 교정). 기동 시점 교정은 main.ts(onLayoutReady)에도 있다 —
+              // 여기 것은 설정 탭을 여는 순간에도 한 번 더 잡아 주는 보험(그 경로를 놓쳐도 여기서 걸린다).
+              s.teamProfileEnabled = true;
+              void p.saveSettings();
+            }
+            st.setDesc(teamLocked ? t.teamProfileLockedDesc : t.teamProfileEnableDesc);
+            st.addToggle((tg) =>
+              tg.setValue(s.teamProfileEnabled).setDisabled(teamLocked).onChange(async (v) => {
+                s.teamProfileEnabled = v;
+                await p.saveSettings();
+                this.refreshIntegrationsCard(); // 연동 카드의 재수신 버튼 노출 여부 갱신
+              })
+            );
+          },
+        },
+      ]},
+
+      // ── 기타(템플릿·언어) ────────────────────────────────────────────────
+      // 개발노트 템플릿 토글·폴더는 잠정 회수(2026-08-14) — 템플릿 원고가 아직 없는 상태에서
+      // 설정만 노출되면 "켰는데 아무것도 없다"가 된다. loadSettings 의 강제 false 와 세트.
+      { type: "group", heading: t.miscHead, items: [
+        // digest 등록부는 팀 기능(team_digests) — 개인 계정에는 뜻이 없어 팀 소속일 때만 보인다.
+        this.textDef(t.digestFolderName, t.digestFolderDesc, "digestFolder", () => sv().teamProfileUpdatedAt > 0),
+        {
+          name: t.langName, desc: t.langDesc,
+          render: (st: Setting) => {
+            st.addDropdown((d) =>
+              d
+                // 기본은 Auto(= Obsidian 설정 → 일반 → 언어를 따름). 무엇을 따르는지 라벨에 적는다 —
+                // "Auto"만 보면 무엇 기준인지 알 수 없다(2026-07-28 지적).
+                .addOption("auto", t.langAutoOpt)
+                .addOption("en", "English")
+                .addOption("ko", "한국어")
+                .setValue(sv().lang)
+                .onChange(async (v) => {
+                  sv().lang = v as AttestSettings["lang"];
+                  await p.saveSettings();
+                  setLang(sv().lang);
+                  new Notice(t.langReload);
+                  this.safeUpdate(); // 전 항목 재라벨 — 열린 페이지는 닫고 루트부터 다시
+
+                })
+            );
+          },
+        },
+      ]},
+    ];
+  }
+
+  /// 봉인 범위 상태 안내 문구 — 팀 문구는 **팀 소속일 때만**. teamProfileEnabled는 "팀 정책을
+  /// 자동 적용할지"라 기본값이 true여서, 팀에 속한 적도 없는 개인 사용자에게 "팀 관리자가 …"라는
+  /// 붉은 경고가 떴다(2026-07-28 발견). 팀 프로파일을 한 번이라도 받은 적이 있어야(=멤버) 팀을
+  /// 말한다. 개인 사용자의 범위 미설정은 리본 배지·상태바·시작 범위 모달이 이미 경고하므로
+  /// 여기서 또 말하지 않는다.
+  private scopeNote(): string {
+    const s = this.plugin.settings;
+    const teamRoot = this.plugin.teamRoot();
+    const localWholeVault = parseFolders(s.includeFolders).length === 0;
+    const inTeam = s.teamProfileUpdatedAt > 0;
+    return teamRoot ? t.scopeTeamRoot(teamRoot)
+      : (inTeam && s.teamProfileEnabled ? (localWholeVault ? t.scopeTeamRootMissingAll : t.scopeTeamRootMissing) : "");
+  }
+
+  private renderScopeHistory(histBox: HTMLElement) {
     histBox.createDiv({ text: t.scopeHistLoading, cls: "setting-item-description" });
     void this.plugin.scopeHistory().then((rows) => {
+      if (!histBox.isConnected) return; // 재렌더로 이미 뜯긴 블록이면 그리지 않는다
       histBox.empty();
       if (!rows.length) {
         histBox.createDiv({ text: t.scopeHistEmpty, cls: "setting-item-description" });
@@ -492,239 +867,10 @@ export class NanalStampSettingTab extends PluginSettingTab {
       const webLink = foot.createEl("a", { text: t.scopeHistWebBtn });
       webLink.onclick = () => this.plugin.openExternal("/account#scope-history");
     }).catch(() => {
+      if (!histBox.isConnected) return;
       histBox.empty();
       histBox.createDiv({ text: t.scopeHistFail, cls: "setting-item-description" });
     });
-
-    new Setting(body).setName(t.taskHead).setHeading();
-    new Setting(body)
-      .setName(t.taskInboxEnableName)
-      .setDesc(t.taskInboxEnableDesc)
-      .addToggle((tg) =>
-        tg.setValue(s.taskInboxEnabled).onChange(async (v) => {
-          s.taskInboxEnabled = v;
-          await this.plugin.saveSettings();
-          this.plugin.updateTaskRibbon(); // 리본 표시/숨김 즉시 반영
-          if (v) {
-            void this.plugin.pollTasks(true); // 켜는 즉시 1회 동기화(배지 복원)
-            this.plugin.startTaskSse();       // SSE 준실시간 구독 재개(데스크톱)
-          } else {
-            this.plugin.stopTaskSse();        // OFF면 SSE도 중단(§7 — 폴링과 동일 원칙)
-            this.app.workspace.detachLeavesOfType(TASK_INBOX_VIEW_TYPE); // 끄면 열린 패널도 정리
-          }
-          this.display(); // 하위 시스템 알림 토글 표시/숨김
-        })
-      );
-    if (s.taskInboxEnabled && Platform.isDesktopApp) {
-      // 시스템 알림은 데스크톱 전용(§7b) — 모바일은 배지·패널만이라 토글 자체를 숨긴다.
-      new Setting(body)
-        .setName(t.taskSysNotifyName)
-        .setDesc(t.taskSysNotifyDesc)
-        .addToggle((tg) =>
-          tg.setValue(s.taskSystemNotify).onChange(async (v) => {
-            s.taskSystemNotify = v;
-            await this.plugin.saveSettings();
-          })
-        );
-      // OS 알림은 자동 설정이 불가(macOS 보안 정책) — 자가진단 버튼으로 권한·스타일 문제를 즉석 확인.
-      new Setting(body)
-        .setName(t.taskSysNotifyTest)
-        .setDesc(t.taskSysNotifyTestDesc)
-        .addButton((b) =>
-          b.setButtonText(t.taskSysNotifyTest).onClick(() => {
-            try { new Notification("nanalStamp", { body: t.taskSysNotifyTestSent }); } catch { /* 무시 */ }
-            new Notice(t.taskSysNotifyTestSent);
-          })
-        );
-    }
-
-    // ── 보관·백업: 오프사이트 스토리지(B·C1) + 로컬 git 아카이브(P1.5, 기본 켜짐) ──
-    new Setting(body).setName(t.storageHead).setHeading();
-    if (!this.plugin.isPro()) {
-      // 비-Pro: 잠금 안내만(결제 CTA는 계정 카드에 이미 있다)
-      new Setting(body).setName(t.githubLocked).setDesc(t.storageProNote);
-    } else {
-      // C2: 팀 custody 스토리지가 nanal이면 멤버의 개인 선택과 무관하게 강제 활성 — 드롭다운 잠금 + 안내로 대체.
-      const teamNanal = s.teamStorage === "nanal";
-      const backendSetting = new Setting(body)
-        .setName(t.storageBackendName)
-        .setDesc(teamNanal ? t.teamStorageForced : t.storageBackendDesc)
-        .addToggle((tg) => {
-          // off|nanal 이지선다라 드롭다운일 이유가 없다 — on/off 토글로.
-          tg.setValue(teamNanal || s.storageBackend === "nanal").onChange(async (v) => {
-            s.storageBackend = v ? "nanal" : "off";
-            await this.plugin.saveSettings();
-            this.display(); // 하위 설명 + 계정 카드 사용량 바 표시/숨김
-          });
-          tg.setDisabled(teamNanal);
-        });
-      if (s.storageBackend === "nanal" || teamNanal) {
-        // 켜짐 상세는 같은 항목의 설명 두 번째 문단으로 — 별도 Setting 블록(위쪽 공백) 금지(2026-07-22 사용자 지적).
-        const extra = backendSetting.descEl.createDiv({ cls: "nanalstamp-desc-extra" });
-        extra.setText(t.storageNanalDesc);
-      }
-    }
-
-    // P1.5: 로컬 git 아카이브(전 티어, 데스크탑만) — 렌더는 전부 동기(프리즈 방지). 폴더선택/이관/git은 버튼 onClick에서만.
-    if (!Platform.isDesktopApp) {
-      new Setting(body).setName(t.archiveName).setDesc(t.archiveMobile);
-    } else {
-      // 토글 없음 — 끌 수 있는 기능이 아니다(archiveEnabled 주석 참조). 위치만 고른다.
-      new Setting(body).setName(t.archiveName).setDesc(t.archiveAlways);
-      // 경로칸(기본값 채워 표시) + "폴더 선택" 버튼. 텍스트 입력은 draft에만 담고
-      // 실제 적용(이관 포함)은 버튼 onClick에서 applyArchivePath로만 한다.
-      let draftPath = s.archivePath;
-      new Setting(body)
-        .setName(t.archivePathName)
-        .setDesc(t.archivePathDesc)
-        .addText((tx) => {
-          tx.setValue(s.archivePath).setPlaceholder(defaultArchivePathSafe(this.app.vault.getName()));
-          tx.onChange((v) => (draftPath = v));
-        })
-        .addButton((b) =>
-          b.setButtonText(t.archivePickBtn).onClick(async () => {
-            // 네이티브 폴더 다이얼로그 best-effort → 실패/없으면 경로칸 직접입력 폴백.
-            let chosen = "";
-            try {
-              const remote = nodeReq("@electron/remote");
-              const r = await remote?.dialog?.showOpenDialog({ properties: ["openDirectory", "createDirectory"] });
-              if (r && !r.canceled && r.filePaths?.[0]) chosen = r.filePaths[0];
-            } catch { /* 폴백: 아래 draftPath 사용 */ }
-            const target = chosen || draftPath;
-            const res = await this.plugin.applyArchivePath(target);
-            if (res.status === "migrated") new Notice(t.archiveMigrated(res.a || "", res.b || ""));
-            else if (res.status === "exists") new Notice(t.archiveExists);
-            else if (res.status === "set") new Notice(t.archiveSet(res.b || ""));
-            else if (res.status === "invault") new Notice(t.archiveInVault);
-            else if (res.status === "error") new Notice(t.archiveNotWritable(res.b || target));
-            this.display(); // 경로칸 갱신
-          })
-        );
-    }
-
-    // ── P1: 증명 원장(로컬, 전 티어, 기본 켜짐) + 백필 + 증명서 크레딧 ────
-    new Setting(body).setName(t.ledgerHead).setHeading();
-    // 토글 없음 — 증명 저장도 끌 수 있는 기능이 아니다(로컬 아카이브와 같은 이유). 폴더만 고른다.
-    new Setting(body).setName(t.ledgerName).setDesc(t.ledgerDesc);
-    this.text(body, t.ledgerFolderName, t.ledgerFolderDesc, "ledgerFolder");
-    new Setting(body)
-      .setName(t.backfillName)
-      .setDesc(t.backfillDesc)
-      .addToggle((tg) =>
-        tg.setValue(s.autoBackfill).onChange(async (v) => {
-          s.autoBackfill = v;
-          await this.plugin.saveSettings();
-          if (v) this.plugin.startBackfill(); // 재활성화 = 1회성 배수 다시 시작(소진되면 스스로 종료)
-        })
-      );
-    // 원문 소급 보관 — 스토리지가 켜져 있을 때만 의미가 있다(시작 범위 모달의 섹션 B와 같은 설정).
-    if (this.plugin.nanalActive()) {
-      new Setting(body)
-        .setName(t.nanalBackfillName)
-        .setDesc(t.nanalBackfillDesc)
-        .addToggle((tg) =>
-          tg.setValue(s.nanalBackfill).onChange(async (v) => {
-            s.nanalBackfill = v;
-            if (!v) s.nanalSince = Date.now(); // 끄는 순간 기준시각 기록 — 이후 ledgerSweep이 이 시각 이후 노트만 소급 대상으로
-            await this.plugin.saveSettings(); // 켜면 값 유지만으로 소급 재개(다음 ledgerSweep이 다시 전부 대상으로 봄)
-          })
-        );
-    }
-    // 제출 패키지 크레딧 구매 — zip 한 번 만들 때 1건씩 쓰는 단건 크레딧(구독과 별개로 유지).
-    // 종전 이름은 '증명서 크레딧'이었다 — 건당 증명서를 접고 제출 패키지가 그것을 흡수하면서
-    // 이 크레딧이 사는 대상도 바뀌었다(2026-08-05).
-    new Setting(body)
-      .setName(t.buyCreditCmd)
-      .setDesc(t.buyCreditDesc)
-      .addButton((b) => b.setButtonText(t.buyCreditCmd).onClick(() => this.plugin.startCheckout("cert_single")));
-
-    // ── C1 고급: GitHub 내보내기 세부(토글·수동 repo/PAT) — 연결/해제 자체는 연동 카드에 ──
-    if (this.plugin.isPro()) {
-      new Setting(body).setName(t.storageAdvHead).setHeading();
-      // 4.3: 팀 custody 활성이면 개인 GitHub 설정은 쓰이지 않음을 안내.
-      if (s.teamCustody) new Setting(body).setDesc(t.teamCustodyPersonalUnused);
-      new Setting(body)
-        .setName(t.githubExportName)
-        .setDesc(t.githubExportDesc)
-        .addToggle((tg) =>
-          tg.setValue(s.githubExport).onChange(async (v) => {
-            s.githubExport = v;
-            await this.plugin.saveSettings();
-            this.display();
-          })
-        );
-      if (s.githubExport) {
-        // 고급(수동 PAT) — 파워 유저용 repo칸 + PAT칸(보조)
-        new Setting(body).setName(t.githubAdvancedName).setDesc(t.githubAdvancedDesc);
-        this.text(body, t.githubRepoName, t.githubRepoDesc, "githubRepo");
-        new Setting(body)
-          .setName(t.githubPatName)
-          .setDesc(t.githubPatDesc)
-          .addText((tx) => {
-            tx.setValue(s.githubPat).onChange(async (v) => {
-              s.githubPat = v.trim();
-              await this.plugin.saveSettings();
-            });
-            (tx.inputEl).type = "password";
-          });
-      }
-    }
-
-    // ── 팀 프로파일 자동 적용(기본 켜짐) — 상태·재수신은 연동 카드에 ──────
-    new Setting(body).setName(t.teamProfileHead).setHeading();
-    // 팀 소속이면 **잠근다**(2026-08-05). 팀 정책 자동 적용을 끄면 teamRoot()가 null이 되어
-    // 팀 폴더 노트가 개인 사슬로 떨어진다 — 조직이 강제해야 할 것을 팀원이 끄는 경로다.
-    // 판정은 teamApiKey 단독이 아니라 teamRole과 합쳐 본다 — teamApiKey는 팀 계정을 따로
-    // 쓰는(회사 메일 ≠ 개인 메일) 소수만 채워지고(main.ts teamAccountLogin), 대다수 팀원은
-    // 같은 계정을 그대로 쓰므로 teamApiKey가 끝까지 비어 있다(main.ts keyFor 주석 참조).
-    // teamRole은 fetchTeamProfile이 매 수신마다 갱신하고 팀을 떠나면 404 분기에서 정리되므로
-    // 대다수 경로를 커버하고 탈퇴 후 자동으로 풀린다. teamApiKey는 "팀 계정 로그인 직후,
-    // 첫 수신이 아직 안 온" 좁은 창(그 사이 설정 탭을 열어 끄는 경우)만 추가로 덮는다.
-    const teamLocked = !!s.teamApiKey || s.teamRole !== "";
-    if (teamLocked && !s.teamProfileEnabled) {
-      // 이미 꺼 둔 사람은 되돌린다(1회 교정). 기동 시점 교정은 main.ts(onLayoutReady)에도 있다 —
-      // 여기 것은 설정 탭을 여는 순간에도 한 번 더 잡아 주는 보험(그 경로를 놓쳐도 여기서 걸린다).
-      s.teamProfileEnabled = true;
-      void this.plugin.saveSettings();
-    }
-    new Setting(body)
-      .setName(t.teamProfileEnableName)
-      .setDesc(teamLocked ? t.teamProfileLockedDesc : t.teamProfileEnableDesc)
-      .addToggle((tg) =>
-        tg.setValue(s.teamProfileEnabled).setDisabled(teamLocked).onChange(async (v) => {
-          s.teamProfileEnabled = v;
-          await this.plugin.saveSettings();
-          this.display(); // 연동 카드의 재수신 버튼 노출 여부 갱신
-        })
-      );
-
-    // ── 기타(템플릿·언어) ────────────────────────────────────────────────
-    new Setting(body).setName(t.miscHead).setHeading();
-    // 개발노트 템플릿 토글·폴더는 잠정 회수(2026-08-14) — 템플릿 원고가 아직 없는 상태에서
-    // 설정만 노출되면 "켰는데 아무것도 없다"가 된다. loadSettings 의 강제 false 와 세트.
-    // digest 등록부는 팀 기능(team_digests) — 개인 계정에는 뜻이 없어 팀 소속일 때만 보인다.
-    if (s.teamProfileUpdatedAt > 0) {
-      this.text(body, t.digestFolderName, t.digestFolderDesc, "digestFolder");
-    }
-    new Setting(body)
-      .setName(t.langName)
-      .setDesc(t.langDesc)
-      .addDropdown((d) =>
-        d
-          // 기본은 Auto(= Obsidian 설정 → 일반 → 언어를 따름). 무엇을 따르는지 라벨에 적는다 —
-          // "Auto"만 보면 무엇 기준인지 알 수 없다(2026-07-28 지적).
-          .addOption("auto", t.langAutoOpt)
-          .addOption("en", "English")
-          .addOption("ko", "한국어")
-          .setValue(s.lang)
-          .onChange(async (v) => {
-            s.lang = v as AttestSettings["lang"];
-            await this.plugin.saveSettings();
-            setLang(s.lang);
-            new Notice(t.langReload);
-            this.display();
-          })
-      );
   }
 }
 

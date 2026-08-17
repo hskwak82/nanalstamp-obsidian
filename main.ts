@@ -1,4 +1,4 @@
-import { addIcon, arrayBufferToBase64, FileSystemAdapter, MarkdownView, Menu, Notice, Platform, RequestUrlResponse, TFile, TFolder, requestUrl } from "obsidian";
+import { addIcon, arrayBufferToBase64, FileSystemAdapter, getLanguage, MarkdownView, Menu, Notice, Platform, RequestUrlResponse, TFile, TFolder, requestUrl } from "obsidian";
 import { PitVerify, pitVerifyReadme, pitCertificateHtml } from "./certgen";
 import * as QRCode from "qrcode";
 import { computeDigestStats, previousPeriod, periodLabel } from "./dashcore";
@@ -14,7 +14,10 @@ import { parseHistoryResponse, parseNotesResponse, parseVaultsResponse, HistRow,
 import { TaskItem, TaskReply, RosterMember, personDisplay, parseTasksResponse, parseRepliesResponse, parseRosterResponse, badgeCount, unionTasks, snapshotOf, diffSnapshot, TaskSnapshot, TaskEvent, sseInitialState, sseFeed, parsePatterns, matchesPatterns, unreported, KitManifest, parseTeamStructure, parseKitManifest, manifestPaths, nfcPath, nfcPaths, creationPlan, isBinaryPath, projectPrefix, commonPrefix, scopedPatterns, TeamStructure, folderStatus, FolderTarget, detectFolderConflicts, detectFolderRenames, FolderNameSnapshot, FolderRename, SortKey, templateForFolder, isUntitledName, nextNoteName, kitRuleFor, teamFolderSegment, digestFolderFor, capFolderReport } from "./taskcore";
 import type { TaskViewPrefs } from "./taskview";
 // 번역 사전은 i18n.ts 소유 — `t`/`tpl`은 setLang()이 재대입하는 live binding이다(재대입은 i18n.ts에서만).
-import { t, tpl, pickLang, setLang } from "./i18n";
+import { t, tpl, pickLang, setLang, setLanguageSource } from "./i18n";
+// 언어 감지 주입 — i18n은 obsidian을 import할 수 없다(모듈 주석 참조). 모듈 로드 시점에 넣어
+// onload의 setLang("auto")가 공식 getLanguage()를 보게 한다.
+setLanguageSource(getLanguage);
 import { fmtDate, fmtDateTime, verNewer } from "./fmtutil";
 import { ICON_ID, ARCHIVE_SOURCE_VIEW_TYPE, NOTE_BROWSER_VIEW_TYPE, DASHBOARD_VIEW_TYPE, TASK_INBOX_VIEW_TYPE, TASK_POLL_MS, TASK_SSE_RETRY_MIN_MS, TASK_SSE_RETRY_MAX_MS, ARCHIVE_INLINE_MAX } from "./constants";
 import { defaultArchivePath, errMsg, nodeReq, parseFolders, sha256Hex, sha256HexBytes, PATH_HASH_PREFIX, hashVaultName, hashPath, toBase64, basenameOf, safeName } from "./pathutil";
@@ -494,6 +497,13 @@ export default class NanalStampPlugin extends RecoveryLayer {
       const menu = new Menu();
       this.buildRibbonMenu(menu);
       menu.showAtMouseEvent(evt);
+      // 경고 항목("처리해야 할 일")의 부모 .menu-item에 상태 클래스 — 아이콘까지 경고색.
+      // 종전 CSS :has를 스토어 심사가 성능 경고로 봐서 클래스로 바꿨다(2026-08-17).
+      // .menu-item DOM은 show 시점에 만들어지므로(빌드 시점 스윕은 빈 손) 표시 직후에 붙인다.
+      // 카테고리 제목은 setIsLabel의 is-label 클래스로 CSS가 직접 처리한다(스윕 불요).
+      (menu as unknown as { dom?: HTMLElement }).dom
+        ?.querySelectorAll(".nanalstamp-menu-warn").forEach((el) =>
+          el.closest(".menu-item")?.addClass("is-nanalstamp-warn"));
     });
     // 리본은 Obsidian이 아이콘을 단색으로 강제 렌더 → 브랜드 씰(PNG data URL)을 직접 넣어 컬러 유지.
     ribbonEl.empty();

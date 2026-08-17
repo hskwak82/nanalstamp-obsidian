@@ -8,17 +8,22 @@ import { fmtBytes } from "./storagecore";
 
 // ── i18n: Obsidian UI 언어 감지(기본 영어, 한국어면 ko) ──────────────────────
 export type Lang = "en" | "ko";
-// Obsidian 언어 자동 감지: 여러 신호(localStorage·moment 로케일·html lang)를 시도.
+// Obsidian 언어 자동 감지: 공식 getLanguage() 우선, moment 로케일·html lang 폴백.
 // window/document 부재를 방어하는 이유: 이 모듈은 최상단에서 pickLang()을 호출하므로(let t = ...),
 // 가드가 없으면 DOM 없는 환경(node:test)에서 import만 해도 ReferenceError가 난다 — 사전 대조 테스트가 불가능해진다.
-// Obsidian 의 getLanguage() 를 쓰지 않는 이유: 그 API 는 1.8.7 부터인데 manifest 의
-// minAppVersion 은 1.7.2 다(revealLeaf 기준). 최소 버전을 더 올리면 그만큼 사용자를 잘라내므로,
-// 언어 감지는 지금처럼 localStorage → moment → document.lang 폴백으로 둔다.
+// getLanguage 를 여기서 직접 import 하지 않는 이유도 같다: obsidian 모듈은 플러그인 로더에서만
+// 해석되므로(전역 require로도 안 잡힌다 — 2026-08-17 CDP 실측) 정적으로 걸면 테스트 번들이
+// 통째로 깨진다. main.ts 가 로드 시 setLanguageSource(getLanguage)로 주입한다.
+let obsidianLanguage: (() => string) | undefined;
+export function setLanguageSource(fn: () => string) { obsidianLanguage = fn; }
 export function pickLang(): Lang {
   const w = (typeof window !== "undefined" ? window : undefined) as unknown as
-    { localStorage?: Storage; moment?: { locale?: () => string } } | undefined;
+    { moment?: { locale?: () => string } } | undefined;
+  const obLang = (() => {
+    try { return obsidianLanguage?.(); } catch { return undefined; }
+  })();
   const cands = [
-    w?.localStorage?.getItem?.("language"),
+    obLang,
     w?.moment?.locale?.(),
     typeof document !== "undefined" ? document.documentElement?.lang : undefined,
   ];

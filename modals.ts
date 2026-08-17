@@ -660,7 +660,7 @@ export class RestoreConfirmModal extends NanalModal {
     new Setting(contentEl)
       .setName(t.rewindInplaceBtn)
       .setDesc(deleted ? t.rewindInplaceRecreate : t.rewindInplaceDesc)
-      .addButton((b) => b.setButtonText(t.rewindInplaceBtn).setWarning().onClick(() => {
+      .addButton((b) => b.setButtonText(t.rewindInplaceBtn).setDestructive().onClick(() => {
         this.close();
         void this.plugin.restoreVersion({ ...pick, mode: "inplace" });
       }));

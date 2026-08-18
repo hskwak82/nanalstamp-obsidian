@@ -1349,19 +1349,32 @@ export default class NanalStampPlugin extends RecoveryLayer {
       // 규모가 작으면 전부, 크면 (편집분 + 회전 몫)만 묻는다 — 어느 쪽이든 로컬 주장은 안 쓴다.
       const sel = toAsk(files, this.settings.reconcileAskCursor ?? 0);
       const present = new Set<string>();
-      for (const part of chunk(sel.ask.map((f) => f.hash), HAVE_CHUNK)) {
-        const r = await requestUrl({
-          url: `${this.settings.serverUrl.replace(/\/$/, "")}/attest/have`,
-          method: "POST", contentType: "application/json",
-          headers: { "x-nanal-api-key": this.settings.apiKey },
-          body: JSON.stringify({ hashes: part }), throw: false,
-        });
-        const rj = r.json as { present?: unknown; error?: unknown } | null;
-        if (r.status !== 200 || !Array.isArray(rj?.present)) {
-          console.warn("[nanalstamp] 대조 실패 — 판정을 미룬다", r.status, rj?.error);
-          return null;                       // reconcileAt 을 갱신하지 않아 '오래됨'으로 잡힌다
+      // 키는 **봉인할 때 쓴 키로** 묻는다. 팀 루트 아래는 팀 키의 계정 사슬에 있으므로
+      // 개인 키로 물으면 서버가 정직하게 "없다"고 답하고, 이미 봉인된 팀 노트를 영원히
+      // 다시 세는 핑퐁이 된다(2026-08-18 실기기 발견 — 개인 계정과 팀 계정이 **다른**
+      // 사용자에서만 드러난다. 같은 계정이면 keyFor 가 같은 키를 돌려줘 종전과 동일).
+      const kPersonal = this.keyFor(false), kTeam = this.keyFor(true);
+      const groups = kPersonal === kTeam
+        ? [{ key: kPersonal, items: sel.ask }]
+        : [
+            { key: kPersonal, items: sel.ask.filter((f) => !this.inTeamRoot(f.path)) },
+            { key: kTeam, items: sel.ask.filter((f) => this.inTeamRoot(f.path)) },
+          ];
+      for (const g of groups) {
+        for (const part of chunk(g.items.map((f) => f.hash), HAVE_CHUNK)) {
+          const r = await requestUrl({
+            url: `${this.settings.serverUrl.replace(/\/$/, "")}/attest/have`,
+            method: "POST", contentType: "application/json",
+            headers: { "x-nanal-api-key": g.key },
+            body: JSON.stringify({ hashes: part }), throw: false,
+          });
+          const rj = r.json as { present?: unknown; error?: unknown } | null;
+          if (r.status !== 200 || !Array.isArray(rj?.present)) {
+            console.warn("[nanalstamp] 대조 실패 — 판정을 미룬다", r.status, rj?.error);
+            return null;                     // reconcileAt 을 갱신하지 않아 '오래됨'으로 잡힌다
+          }
+          for (const h of rj.present as string[]) present.add(h);
         }
-        for (const h of rj.present as string[]) present.add(h);
       }
       // 이번에 묻지 않은 것은 **판정 대상이 아니다.** 안 물어본 것을 "없다"고 하면
       // 멀쩡한 노트를 다시 봉인하게 된다(회전 방식에서 특히 위험하다).
@@ -2448,28 +2461,39 @@ export default class NanalStampPlugin extends RecoveryLayer {
   // 봉인 시점 아카이브·미러의 일시 실패 재시도(메모리만 — 재시작하면 catchUp/ledgerSweep이 현재 상태를 다시 커버).
   // 각 path의 현재 해시가 아직 sealedIndex와 같으면(그 봉인 유지 중) recordSealProof 재호출; 편집돼 달라졌으면
   // 그 중간 버전은 이미 새 봉인이 recordSealProof를 다시 부르므로 셋에서 제거.
+  private retryCursor = 0; // 재시도 순환 커서 — 틱마다 앞사람만 보면 뒤가 굶는다
   private retrySealArchive() {
     // 개인 키 거부 중에는 재시도 틱 자체가 쉰다 — 팀 경로 재개는 개인 키 복구 후.
     // 의도된 단순화(2026-08-09 최종 리뷰). 봉인 시점의 첫 시도는 per-path 로 갈리므로
     // 팀 노트가 **새로** 봉인되는 길은 열려 있고, 여기서 막히는 것은 밀린 재시도뿐이다.
     if (!this.settings.enabled || this.authFailed || this.sealArchiveRetry.size === 0) return;
     if (this.backoffUntil > Date.now()) return; // 429 백오프 존중
-    for (const p of Array.from(this.sealArchiveRetry)) {
-      const f = this.app.vault.getAbstractFileByPath(p);
-      if (!(f instanceof TFile)) {
-        // ★ vault 에 파일이 없다고 포기하지 않는다(2026-08-01). 봉인 시점에 **아카이브가 먼저**
-        //   채워지므로 그 버전의 원본은 로컬 git 에 그대로 있다. 여기서 큐를 비우면 올릴 수
-        //   있는 원문을 영영 안 올리게 된다 — "원본이 없어서"가 아니라 "안 찾아서" 못 올리는 것.
-        void this.retryFromArchive(p);
-        continue;
-      }
-      void (async () => {
+    // ★ 틱당 상한 + 배치 안 직렬. 예전에는 집합 전체를 fire-and-forget 으로 쐈다 — 소수의 일시
+    //   실패용 설계였는데, Pro 전환 직후 소급 보관 백로그 1,269건이 들어오자 30초마다 그 전부가
+    //   동시 발사돼 렌더러 네트워크 스택이 고갈됐다(net::ERR_INSUFFICIENT_RESOURCES, 2026-08-18
+    //   실기기). 그 폭풍이 자기 자신(전부 실패→재보류)과 청크 업로드·대조·스토어 설치까지 굶겼다.
+    //   상한은 4건: 대형 첨부 업로드가 배치 안에서 직렬이라 이 값이 곧 동시 업로드 상한이다.
+    const all = Array.from(this.sealArchiveRetry);
+    const n = Math.min(4, all.length);
+    const start = this.retryCursor % all.length;
+    this.retryCursor = (start + n) % all.length;
+    void (async () => {
+      for (let i = 0; i < n; i++) {
+        const p = all[(start + i) % all.length];
+        const f = this.app.vault.getAbstractFileByPath(p);
+        if (!(f instanceof TFile)) {
+          // ★ vault 에 파일이 없다고 포기하지 않는다(2026-08-01). 봉인 시점에 **아카이브가 먼저**
+          //   채워지므로 그 버전의 원본은 로컬 git 에 그대로 있다. 여기서 큐를 비우면 올릴 수
+          //   있는 원문을 영영 안 올리게 된다 — "원본이 없어서"가 아니라 "안 찾아서" 못 올리는 것.
+          await this.retryFromArchive(p);
+          continue;
+        }
         let hash: string;
-        try { hash = await this.hashOf(f); } catch { return; }
-        if (hash !== this.settings.sealedIndex[p]) { this.markRetry(p, false); return; } // 편집됨 → 새 봉인이 커버
+        try { hash = await this.hashOf(f); } catch { continue; }
+        if (hash !== this.settings.sealedIndex[p]) { this.markRetry(p, false); continue; } // 편집됨 → 새 봉인이 커버
         await this.recordSealProof(f, hash); // 성공/완료 시 recordSealProof가 셋에서 스스로 제거
-      })();
-    }
+      }
+    })();
   }
 
   // 확정(비트코인 블록 존재)된 노트의 자기검증 번들을 로컬 원장에 저장하고,

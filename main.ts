@@ -414,7 +414,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
   /// 켤 때마다 뜨면 사람이 무시하기 시작한다.
   private expiringNotifiedFor: number | null = null;
   private teamExpiredNotified = false;    // past_due 알림 세션당 1회 가드
-  entitlement: { tier: string; cert_credits: number; is_pro: boolean; status?: string; user_id?: string; paid_until?: number | null } | null = null;
+  entitlement: { tier: string; cert_credits: number; is_pro: boolean; status?: string; user_id?: string; paid_until?: number | null; plan_code?: string | null } | null = null;
   // 해시별 verify 결과 캐시 + 노트 전환 디바운스 타이머(같은 해시 재조회/연타 전환 시 서버 호출 절감)
   private verifyCache = new Map<string, { result: VerifyResp; ts: number }>();
   private statusDebounceTimer?: number;
@@ -3670,9 +3670,10 @@ export default class NanalStampPlugin extends RecoveryLayer {
   async startCheckout(planCode: string) {
     if (!this.settings.apiKey) return new Notice(t.apiKeyMissing);
     try {
-      // 한국어=Toss(KRW), 그 외=Stripe(USD)
+      // 한국어=Toss(KRW), 그 외=Paddle(USD). 단건(cert_single)의 국내 경로는 서버가
+      // 계좌이체 페이지로 돌려준다 — 게이트웨이 선택은 서버 응답의 checkout_url 이 최종이다.
       const lang: Lang = this.settings.lang === "auto" ? pickLang() : this.settings.lang;
-      const gateway = lang === "ko" ? "toss" : "lemonsqueezy";
+      const gateway = lang === "ko" ? "toss" : "paddle";
       const res = await requestUrl({
         url: `${this.base()}/attest/checkout`,
         method: "POST",

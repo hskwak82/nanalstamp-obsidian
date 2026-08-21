@@ -224,9 +224,12 @@ export class NanalStampSettingTab extends PluginSettingTab {
     const badge = titleRow.createSpan({ cls: "nanalstamp-tier-badge", text: "…" });
     card.createEl("p", { text: s.accountEmail || t.acctConnected, cls: "nanalstamp-card-desc" });
     const creditsEl = card.createEl("p", { cls: "nanalstamp-card-desc", text: t.acctLoading });
-    const showEnt = (e: { tier: string; cert_credits: number; is_pro: boolean; status?: string; user_id?: string } | null) => {
+    const showEnt = (e: { tier: string; cert_credits: number; is_pro: boolean; status?: string; user_id?: string; plan_code?: string | null } | null) => {
       if (!e) { badge.setText("—"); creditsEl.setText(t.acctConnected); return; }
-      badge.setText(e.tier.toUpperCase());
+      // 배지는 구매한 플랜명으로 — 내부 등급(free/pro)만 보여주면 Max 구매자에게 "PRO"가 보인다
+      // (2026-08-18 실결제 스모크 지적, 포털 account.html 과 같은 표기).
+      const PLAN_BADGE: Record<string, string> = { pro_lite_yearly: "LITE", pro_yearly: "PRO", pro_max_yearly: "MAX", pro_perpetual: "PRO" };
+      badge.setText(e.is_pro ? (PLAN_BADGE[e.plan_code ?? ""] ?? e.tier.toUpperCase()) : e.tier.toUpperCase());
       badge.toggleClass("is-pro", e.is_pro);
       creditsEl.setText(t.acctCreditsLabel(e.cert_credits) + (e.status === "past_due" ? " · " + t.pastDueBadge : ""));
       creditsEl.toggleClass("mod-warning", e.status === "past_due");

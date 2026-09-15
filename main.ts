@@ -1,4 +1,8 @@
 import { addIcon, arrayBufferToBase64, FileSystemAdapter, getLanguage, MarkdownView, Menu, Notice, Platform, RequestUrlResponse, TFile, TFolder, requestUrl } from "obsidian";
+// 브랜드 씰 — esbuild dataurl 로더가 main.js에 인라인한다(정본은 여전히 icon.png 하나).
+// 종전엔 런타임에 플러그인 폴더의 icon.png를 읽었는데, 스토어 설치·업데이트는 main.js·
+// manifest.json·styles.css만 옮겨서 새 vault마다 아이콘이 조용히 빈 자리가 됐다(2026-09-02).
+import ICON_DATA_URL from "./icon.png";
 import { PitVerify, pitVerifyReadme, pitCertificateHtml } from "./certgen";
 import * as QRCode from "qrcode";
 import { computeDigestStats, previousPeriod, periodLabel } from "./dashcore";
@@ -482,15 +486,11 @@ export default class NanalStampPlugin extends RecoveryLayer {
     setLang(this.settings.lang); // 설정/감지에 맞춰 언어 적용(명령·UI 이름 등록 전에)
     if (!Platform.isDesktopApp) void this.fetchStorageUsage(); // D2 자격 캐시 조기 갱신(실패 시 캐시값 유지)
     // 로고는 icon.png(평면 이미지) — 필터 없이 어디서나 동일하게 표시. 교체 시 icon.png만 바꾸면 됨.
-    // Store review note: adapter.readBinary is required here — the Vault API does not
-    // reach files under configDir (the plugin's own folder). Works on mobile too.
-    try {
-      const buf = await this.app.vault.adapter.readBinary(`${this.app.vault.configDir}/plugins/${this.manifest.id}/icon.png`);
-      this.iconUrl = "data:image/png;base64," + arrayBufferToBase64(buf);
-    } catch { this.iconUrl = ""; }
+    // 빌드가 main.js에 인라인하므로(위 import) 어떤 설치 경로로도 반드시 따라온다.
+    this.iconUrl = ICON_DATA_URL;
     // 탭·메뉴·상태바 아이콘도 정본 nanal.png(iconUrl)를 <image>로 그대로 그린다(필터·재해석 없음).
-    // 로드 실패 시 빈 아이콘 — SVG 글리프 등 임의 대체물 금지(브랜드 원칙: 이미지 하나만).
-    addIcon(ICON_ID, this.iconUrl ? `<image href="${this.iconUrl}" x="0" y="0" width="100" height="100"/>` : "");
+    // SVG 글리프 등 임의 대체물 금지(브랜드 원칙: 이미지 하나만).
+    addIcon(ICON_ID, `<image href="${this.iconUrl}" x="0" y="0" width="100" height="100"/>`);
     // 리본 클릭 → 액션 메뉴(항상 시각 피드백). 좌클릭 즉시 봉인 대신 메뉴로 기능 노출.
     // 구성은 buildRibbonMenu가 소유한다 — 리본 클릭 없이도 메뉴를 만들어 검사할 수 있게 분리했다.
     const ribbonEl = this.addRibbonIcon(ICON_ID, "nanalStamp", (evt: MouseEvent) => {

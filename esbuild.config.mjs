@@ -10,6 +10,10 @@ const context = await esbuild.context({
   target: "es2018",
   platform: "browser",
   charset: "utf8",
+  // 브랜드 씰(icon.png)을 main.js에 data: URL로 인라인한다. 스토어 설치·업데이트는
+  // main.js·manifest.json·styles.css 세 파일만 옮기므로, 런타임에 플러그인 폴더의
+  // icon.png를 읽는 방식은 새 vault에서 아이콘이 조용히 빈 자리가 됐다(2026-09-02 실측).
+  loader: { ".png": "dataurl" },
   outfile: "main.js",
   sourcemap: production ? false : "inline",
   minify: production,

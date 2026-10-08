@@ -14,7 +14,7 @@ import { sealHold, effectiveLimit, planThatFits, HoldReason, MB } from "./holdco
 import { blobExt, fmtBytes, storageEndpoint } from "./storagecore";
 import { encryptBlob, decryptBlob } from "./cryptocore";
 import { RewindEntry, deletedEntries } from "./rewindcore";
-import { parseHistoryResponse, parseNotesResponse, parseVaultsResponse, HistRow, NoteRow, VaultRow } from "./notebrowsercore";
+import { parseHistoryResponse, parseNotesResponse, parseVaultsResponse, namesToBackfill, HistRow, NoteRow, VaultRow } from "./notebrowsercore";
 import { TaskItem, TaskReply, RosterMember, personDisplay, parseTasksResponse, parseRepliesResponse, parseRosterResponse, badgeCount, unionTasks, snapshotOf, diffSnapshot, TaskSnapshot, TaskEvent, sseInitialState, sseFeed, parsePatterns, matchesPatterns, unreported, KitManifest, parseTeamStructure, parseKitManifest, manifestPaths, nfcPath, nfcPaths, creationPlan, isBinaryPath, projectPrefix, commonPrefix, scopedPatterns, TeamStructure, folderStatus, FolderTarget, detectFolderConflicts, detectFolderRenames, FolderNameSnapshot, FolderRename, SortKey, templateForFolder, isUntitledName, nextNoteName, kitRuleFor, teamFolderSegment, digestFolderFor, capFolderReport } from "./taskcore";
 import type { TaskViewPrefs } from "./taskview";
 // 번역 사전은 i18n.ts 소유 — `t`/`tpl`은 setLang()이 재대입하는 live binding이다(재대입은 i18n.ts에서만).
@@ -580,6 +580,9 @@ export default class NanalStampPlugin extends RecoveryLayer {
     }, 600_000));
     // P1: 증명 원장 sweep — 하루 1회(확정된 새 앵커를 로컬 원장/미러에 반영). 로드 직후 1회는 onLayoutReady에서.
     this.registerInterval(window.setInterval(() => void this.ledgerSweep(), 24 * 60 * 60 * 1000));
+    // 이름 빠진 봉인 채우기 — 로드 2분 뒤 1회, 이후 하루 1회(멱등·상한)
+    window.setTimeout(() => void this.backfillNoteNames(), 2 * 60 * 1000);
+    this.registerInterval(window.setInterval(() => void this.backfillNoteNames(), 24 * 60 * 60 * 1000));
     // 범위가 바뀌었는지 5분마다 본다(로컬 해시 한 번 — 달라졌을 때만 서버를 부른다).
     this.registerInterval(window.setInterval(() => void this.syncScopeSnapshot(), 5 * 60 * 1000));
     // 6시간마다 대조. mtime 캐시 덕에 변경분만 다시 읽으므로 반복 비용은 거의 없다.
@@ -1617,7 +1620,12 @@ export default class NanalStampPlugin extends RecoveryLayer {
         const hash = nodeCrypto.createHash("sha256").update(content, "utf8").digest("hex");
         if (hash === s.lastHash) continue;
         const pathHash = nodeCrypto.createHash("sha256").update(PATH_HASH_PREFIX + path, "utf8").digest("hex");
-        const payload = JSON.stringify({ api_key: this.settings.apiKey, hash, path: pathHash });
+        // 팀 노트는 팀 키·팀 사슬로, 이름도 싣는다(2026-10-08) — 예전에는 개인 키로 이름 없이 보내 팀 노트가 개인 사슬에 들어갔다.
+        // 이름은 동기로 못 만드니 봉인 때 만들어 둔 것(encNameCache). 없으면 다음 실행의 backfillNoteNames 가 채운다.
+        const inTeam = this.inTeamRoot(path);
+        const encName = this.encNameCache.get(path); const vault = encName ? this.encVaultCache : null;
+        const payload = JSON.stringify({ api_key: this.keyFor(inTeam), hash, path: pathHash,
+          ...(encName ? { enc_name: encName } : {}), ...(vault ? { enc_vault: vault.enc, vault_hash: vault.hash } : {}), ...(inTeam ? { team_scope: true } : {}) });
         // Store review note: sendBeacon is used ONLY here, to flush the last pending seal when the
         // app is closing. It is not analytics/telemetry — the payload is this user's own note hash
         // going to their own account on the same host as every other request. requestUrl (and any
@@ -3454,8 +3462,44 @@ export default class NanalStampPlugin extends RecoveryLayer {
       const dek = await this.nanalDek(this.teamBlobFor(path));
       if (!dek) return null;
       const enc = await encryptBlob(dek, pathHash, "name", new TextEncoder().encode(path));
-      return arrayBufferToBase64(enc.buffer as ArrayBuffer);
+      const b64 = arrayBufferToBase64(enc.buffer as ArrayBuffer);
+      this.encNameCache.set(path, b64); // 종료 직전 봉인(beacon)은 동기라 여기서 만든 것을 싣는다
+      return b64;
     } catch (e) { console.warn("[nanalstamp] enc_name skip", e); return null; }
+  }
+  private encNameCache = new Map<string, string>();
+
+  /// 이름이 빠진 봉인을 채운다(2026-10-08). 종료 직전 봉인·DEK 일시 실패로 이름 없이 남은 봉인은 다른 기기
+  /// 목록에서 「어느 노트인지 모르는 기록」이 된다 — 경로를 아는 이 vault 가 서버에 이름을 보낸다(멱등, 한 번에 상한).
+  async backfillNoteNames(): Promise<number> {
+    if (!this.settings.enabled || !this.settings.apiKey) return 0;
+    const pathByHash = new Map<string, string>();
+    for (const f of this.app.vault.getMarkdownFiles()) if (this.inScope(f.path)) pathByHash.set(await hashPath(f.path), f.path);
+    let done = 0;
+    const keys = [...new Set([this.keyFor(false), this.keyFor(true)].filter(Boolean))];
+    for (const key of keys) {
+      const rows: NoteRow[] = []; let before: number | undefined;
+      for (let page = 0; page < 60; page++) {
+        let r: RequestUrlResponse;
+        try { r = await requestUrl({ url: `${this.base()}/attest/notes?limit=50${before != null ? `&before_seq=${before}` : ""}`, method: "GET", headers: { "x-nanal-api-key": key }, throw: false }); } catch { break; }
+        if (r.status !== 200) break;
+        const res = parseNotesResponse(r.json); if (!res) break;
+        rows.push(...res.rows); if (!res.hasMore || !res.rows.length) break; before = res.rows[res.rows.length - 1].seq;
+      }
+      for (const { path, pathHash } of namesToBackfill(rows, pathByHash)) {
+        const inTeam = this.inTeamRoot(path);
+        if (this.keyFor(inTeam) !== key) continue; // 그 노트를 봉인한 계정의 키로만
+        const encName = await this.encNameFor(path, pathHash); if (!encName) continue;
+        const vault = await this.encVaultFor();
+        try {
+          const r = await requestUrl({ url: `${this.base()}/attest/notes/name`, method: "POST", headers: { "content-type": "application/json", "x-nanal-api-key": key }, throw: false,
+            body: JSON.stringify({ path: pathHash, enc_name: encName, ...(vault ? { enc_vault: vault.enc, vault_hash: vault.hash } : {}), ...(inTeam ? { team_scope: true } : {}) }) });
+          if (r.status === 200) done++;
+        } catch { /* 다음 실행이 다시 한다 */ }
+      }
+    }
+    if (done) console.info("[nanalstamp] note names backfilled", done);
+    return done;
   }
 
   // vault 식별 암호화 — "vault" 도메인, 키 파생 인자는 vault 이름 자체의 해시(경로해시와 동일 원리:

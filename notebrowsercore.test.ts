@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseHistoryResponse, parseNotesResponse, parseVaultsResponse, rowDisplay } from "./notebrowsercore";
+import { parseHistoryResponse, parseNotesResponse, parseVaultsResponse, rowDisplay, namesToBackfill } from "./notebrowsercore";
 
 const H = (c: string) => c.repeat(64);
 
@@ -70,4 +70,11 @@ test("history 응답 파싱 — 정상·불량 스킵·has_more", () => {
   assert.equal(r.rows[1].block, null);
   assert.equal(r.hasMore, true);
   assert.deepEqual(parseHistoryResponse(null), { rows: [], hasMore: false });
+});
+
+test("namesToBackfill: 이름 없는 봉인 중 이 vault 에 있는 경로만, 상한까지", () => {
+  const row = (pathHash: string, encName: string | null) => ({ pathHash, encName, seq: 1, receivedAt: 1, fileHash: "f", block: null, vaultHash: null, encVault: null });
+  const m = new Map([["a", "노트/a.md"], ["b", "노트/b.md"], ["c", "노트/c.md"]]);
+  assert.deepEqual(namesToBackfill([row("a", null), row("b", "bkE="), row("z", null), row("c", null)], m), [{ path: "노트/a.md", pathHash: "a" }, { path: "노트/c.md", pathHash: "c" }]);
+  assert.equal(namesToBackfill([row("a", null), row("c", null)], m, 1).length, 1);
 });

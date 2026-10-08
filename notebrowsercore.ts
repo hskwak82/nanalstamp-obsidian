@@ -93,3 +93,15 @@ export function parseHistoryResponse(j: unknown): { rows: HistRow[]; hasMore: bo
   }
   return { rows: out, hasMore: o?.has_more === true };
 }
+
+/// 이름이 빠진 채 봉인된 노트 중 **이 vault 에 지금 있는 것**(2026-10-08). 종료 직전 봉인(beacon)·DEK 일시 실패로
+/// 이름 없이 남은 봉인을, 경로를 아는 이 기기가 채운다(POST /attest/notes/name). 경로를 모르는 것은 채울 수 없다.
+export function namesToBackfill(rows: NoteRow[], pathByHash: Map<string, string>, cap = 300): { path: string; pathHash: string }[] {
+  const out: { path: string; pathHash: string }[] = [];
+  for (const r of rows) {
+    if (r.encName) continue;
+    const path = pathByHash.get(r.pathHash); if (!path) continue;
+    out.push({ path, pathHash: r.pathHash }); if (out.length >= cap) break;
+  }
+  return out;
+}

@@ -3498,7 +3498,6 @@ export default class NanalStampPlugin extends RecoveryLayer {
         } catch { /* 다음 실행이 다시 한다 */ }
       }
     }
-    if (done) console.info("[nanalstamp] note names backfilled", done);
     return done;
   }
 

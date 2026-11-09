@@ -6,7 +6,7 @@ import ICON_DATA_URL from "./icon.png";
 import { PitVerify, pitVerifyReadme, pitCertificateHtml } from "./certgen";
 import * as QRCode from "qrcode";
 import { computeDigestStats, previousPeriod, periodLabel } from "./dashcore";
-import { isSealableFile, isOverSizeLimit, isMarkdownPath, inSealScopePure, inFolderScopePure, scopeUnset, isRestoredCopy, isKitSample, RESTORED_PREFIXES, inTeamRootPure, teamBlobScopePure, apiKeyForPure } from "./sealscope";
+import { isSealableFile, isOverSizeLimit, isMarkdownPath, inSealScopePure, inFolderScopePure, scopeUnset, isRestoredCopy, isKitSample, RESTORED_PREFIXES, inTeamRootPure, teamBlobScopePure, apiKeyForPure, webMirrorRoots, inWebMirror, WEB_MIRROR_MARKER } from "./sealscope";
 import { scopeBody, scopeDocument, scopeChanged, SCOPE_ZERO } from "./scopecore";
 import { verifySealAck } from "./chaincore";
 import { chunk, pendingFrom, rotationSlice, reconcileStale, toAsk, HAVE_CHUNK, ScannedFile } from "./reconcilecore";
@@ -18,7 +18,7 @@ import { parseHistoryResponse, parseNotesResponse, parseVaultsResponse, namesToB
 import { TaskItem, TaskReply, RosterMember, personDisplay, parseTasksResponse, parseRepliesResponse, parseRosterResponse, badgeCount, unionTasks, snapshotOf, diffSnapshot, TaskSnapshot, TaskEvent, sseInitialState, sseFeed, parsePatterns, matchesPatterns, unreported, KitManifest, parseTeamStructure, parseKitManifest, manifestPaths, nfcPath, nfcPaths, creationPlan, isBinaryPath, projectPrefix, commonPrefix, scopedPatterns, TeamStructure, folderStatus, FolderTarget, detectFolderConflicts, detectFolderRenames, FolderNameSnapshot, FolderRename, SortKey, templateForFolder, isUntitledName, nextNoteName, kitRuleFor, teamFolderSegment, digestFolderFor, capFolderReport } from "./taskcore";
 import type { TaskViewPrefs } from "./taskview";
 // 번역 사전은 i18n.ts 소유 — `t`/`tpl`은 setLang()이 재대입하는 live binding이다(재대입은 i18n.ts에서만).
-import { t, tpl, pickLang, setLang, setLanguageSource } from "./i18n";
+import { t, tpl, pickLang, setLang, setLanguageSource, STR } from "./i18n";
 // 언어 감지 주입 — i18n은 obsidian을 import할 수 없다(모듈 주석 참조). 모듈 로드 시점에 넣어
 // onload의 setLang("auto")가 공식 getLanguage()를 보게 한다.
 setLanguageSource(getLanguage);
@@ -542,6 +542,11 @@ export default class NanalStampPlugin extends RecoveryLayer {
     // 노트의 마지막 탭/뷰가 닫히는 순간 감지 → dirty면 즉시 봉인(전환·포커스 이탈 즉시 봉인은 폐지)
     this.registerEvent(this.app.workspace.on("layout-change", () => this.onLayoutChange()));
     // 파일 이동/삭제 시 states·failed 키를 이관/정리(무한 증식 방지)
+    this.refreshWebMirrorRoots();
+    const mirrorTouched = (p: string) => p.endsWith("/" + WEB_MIRROR_MARKER) || p === WEB_MIRROR_MARKER;
+    this.registerEvent(this.app.vault.on("create", (f) => { if (mirrorTouched(f.path)) this.refreshWebMirrorRoots(); }));
+    this.registerEvent(this.app.vault.on("delete", (f) => { if (mirrorTouched(f.path)) this.refreshWebMirrorRoots(); }));
+    this.registerEvent(this.app.vault.on("rename", (f, old) => { if (mirrorTouched(f.path) || mirrorTouched(old)) this.refreshWebMirrorRoots(); }));
     this.registerEvent(this.app.vault.on("rename", (file, oldPath) => { if (file instanceof TFile) void this.onRename(file, oldPath); }));
     this.registerEvent(this.app.vault.on("delete", (file) => { if (file instanceof TFile) void this.onDelete(file); }));
     this.activeFile = this.app.workspace.getActiveFile();
@@ -704,6 +709,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
     // 재시작 따라잡기: 워크스페이스 준비 후, 마지막 실행 이후 수정된 노트를 봉인(강제종료 복구)
     this.app.workspace.onLayoutReady(() => {
       this.openNotePaths = this.collectOpenNotePaths(); // 워크스페이스 복원 완료 시점의 실제 열림 집합으로 재스냅샷
+      this.refreshWebMirrorRoots(); // 로드 직후엔 vault 목록이 덜 찼을 수 있다
       void this.ensureArchive(); // P1.5: 아카이브 폴더 보장 + .git init(데스크탑만)
       // Task 12(2026-08-05): 팀 소속 흔적이 있는데 자동 적용이 꺼져 있으면 되돌린다(1회 교정).
       // 흔적이 없으면(개인 사용자) 아무 일도 하지 않는다 — settingtab.ts의 teamLocked와 같은 판정.
@@ -883,6 +889,8 @@ export default class NanalStampPlugin extends RecoveryLayer {
   private inScope(p: string): boolean {
     // 복원 사본은 봉인 대상이 아니다 — 재봉인 무의미 + 재구성 순환(2026-07-22 실증).
     if (isRestoredCopy(p)) return false;
+    // 웹 에디터의 「내 컴퓨터 폴더」 사본 — 웹에서 이미 봉인했다. 다시 봉인하면 같은 기록이 두 번 들어간다(2026-10-12)
+    if (inWebMirror(p, this.webMirrorRoots)) return false;
     return inFolderScopePure(p, this.teamRoot(),
       parseFolders(this.settings.includeFolders), parseFolders(this.settings.excludeFolders),
       this.settings.sealWholeVault);
@@ -900,6 +908,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
   /// 아니다 — scheduleRefRebuild 주석대로 "재계산 직후 새로 참조된 첨부를 즉시 큐잉하진 않는다 — 다음
   /// 스윕이 자연 포착").
   private inSealScope(path: string): boolean {
+    if (inWebMirror(path, this.webMirrorRoots)) return false;
     const isRestored = isRestoredCopy(path);
     // 팀이 "샘플도 봉인"을 켰으면 샘플 게이트를 끈다(기본은 꺼짐 = 샘플 봉인 안 함).
     const sample = !this.settings.sealKitSamples && isKitSample(path);
@@ -3468,6 +3477,9 @@ export default class NanalStampPlugin extends RecoveryLayer {
     } catch (e) { console.warn("[nanalstamp] enc_name skip", e); return null; }
   }
   private encNameCache = new Map<string, string>();
+  /// 웹 사본 폴더(표시 파일 nanalstamp-web-mirror.json 이 있는 폴더) — 봉인 범위에서 뺀다. 로드·레이아웃 완료·표시 파일 생김/지움 때 다시 센다.
+  webMirrorRoots = new Set<string>();
+  refreshWebMirrorRoots(): void { this.webMirrorRoots = webMirrorRoots(this.app.vault.getFiles().map((f) => f.path)); }
 
   /// 이름이 빠진 봉인을 채운다(2026-10-08). 종료 직전 봉인·DEK 일시 실패로 이름 없이 남은 봉인은 다른 기기
   /// 목록에서 「어느 노트인지 모르는 기록」이 된다 — 경로를 아는 이 vault 가 서버에 이름을 보낸다(멱등, 한 번에 상한).
@@ -4223,7 +4235,7 @@ export default class NanalStampPlugin extends RecoveryLayer {
       url: `${this.base()}/auth/register`,
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, lang: t === STR.ko ? "ko" : "en" }), // 메일 언어(서버 0047) — 빠뜨리면 가입 메일이 한·영 병기(10/28·11/02 해외 가입자 실측)
       throw: false,
     });
     if (res.status >= 300) throw new Error((res.json as { error?: string } | null)?.error || `HTTP ${res.status}`);

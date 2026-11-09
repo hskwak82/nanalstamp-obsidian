@@ -1,7 +1,7 @@
 // sealscope 순수 판정 로직 테스트 — 실행: npm test (esbuild 번들 → node --test)
 import { test } from "node:test";
 import assert from "node:assert";
-import { isSealableFile, isOverSizeLimit, isMarkdownPath, inSealScopePure, isRestoredCopy, RESTORED_PREFIXES, inFolderScopePure, scopeUnset, isKitSample, teamBlobScopePure, inTeamRootPure, apiKeyForPure, authFailedForPure } from "./sealscope";
+import { isSealableFile, isOverSizeLimit, isMarkdownPath, inSealScopePure, isRestoredCopy, RESTORED_PREFIXES, inFolderScopePure, scopeUnset, isKitSample, teamBlobScopePure, inTeamRootPure, apiKeyForPure, authFailedForPure, webMirrorRoots, inWebMirror, WEB_MIRROR_MARKER } from "./sealscope";
 import { restoredPath } from "./storagecore";
 
 test("isRestoredCopy: 두 복원 접두(restored-vault/·restored/) 아래는 전부 복원 사본", () => {
@@ -220,4 +220,16 @@ test("authFailedForPure: apiKeyForPure가 팀 키를 고르는 모든 입력에�
   // 공백뿐인 팀 키: 키는 개인 것을 쓰므로 팀이 거부돼도 봉인은 멈추지 않아야 한다.
   assert.strictEqual(apiKeyForPure(true, solo, "   "), solo);
   assert.strictEqual(authFailedForPure(true, "   ", false, true), false);
+});
+
+test("웹 사본 폴더 — 표시 파일이 있는 폴더(와 아래)는 봉인하지 않는다, 맨 위면 vault 전체", () => {
+  const roots = webMirrorRoots(["메모/a.md", `웹사본/${WEB_MIRROR_MARKER}`, "웹사본/연구/b.md", "x/nanalstamp-web-mirror.json.bak"]);
+  assert.deepStrictEqual([...roots], ["웹사본"]);
+  assert.strictEqual(inWebMirror("웹사본/연구/b.md", roots), true);
+  assert.strictEqual(inWebMirror("웹사본", roots), true);
+  assert.strictEqual(inWebMirror("웹사본2/c.md", roots), false);
+  assert.strictEqual(inWebMirror("메모/a.md", roots), false);
+  const top = webMirrorRoots([WEB_MIRROR_MARKER, "a.md"]);
+  assert.strictEqual(inWebMirror("a.md", top), true);
+  assert.strictEqual(inWebMirror("a.md", new Set()), false);
 });

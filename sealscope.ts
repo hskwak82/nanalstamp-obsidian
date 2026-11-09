@@ -133,3 +133,27 @@ export function authFailedForPure(
   const tk = (teamKey || "").trim();
   return team && tk ? teamFailed : soloFailed;
 }
+
+/// 웹 사본 폴더 표시 파일(2026-10-12) — 웹 에디터가 「내 컴퓨터 폴더에도 저장」으로 쓰는 폴더의 맨 위에 둔다.
+/// 그 폴더의 글은 **웹에서 이미 봉인된 사본**이다. 그 폴더를 옵시디언에서 열었을 때 플러그인이 다시 봉인하면
+/// 같은 기록이 사슬에 두 번 들어간다 — 표시 파일이 있는 폴더(와 그 아래)는 봉인 범위에서 뺀다.
+/// 이름은 점으로 시작하지 않는다: 옵시디언은 점 파일을 vault 목록에 올리지 않아 찾을 수 없다.
+export const WEB_MIRROR_MARKER = "nanalstamp-web-mirror.json";
+
+/// 표시 파일 경로들 → 사본 폴더 경로 집합("" = vault 맨 위).
+export function webMirrorRoots(filePaths: Iterable<string>): Set<string> {
+  const out = new Set<string>();
+  for (const p of filePaths) {
+    const name = p.slice(p.lastIndexOf("/") + 1);
+    if (name === WEB_MIRROR_MARKER) out.add(p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
+  }
+  return out;
+}
+
+/// 이 경로가 웹 사본 폴더 안인가.
+export function inWebMirror(path: string, roots: Set<string>): boolean {
+  if (!roots.size) return false;
+  if (roots.has("")) return true;
+  for (const r of roots) if (path === r || path.startsWith(r + "/")) return true;
+  return false;
+}
